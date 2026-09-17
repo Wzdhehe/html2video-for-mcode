@@ -108,12 +108,20 @@ for (const s of slides) {
       const durMs = duration * 1000;
       const pct = x => Math.max(0, Math.min(100, (x / durMs) * 100));
       const css = clauses.map((c, i) => {
+        const isLast = i === clauses.length - 1;
         const a = pct(c.start * 1000);
         const b = Math.max(pct((clauses[i + 1]?.start ?? duration) * 1000), a + 0.5);
-        const fade = Math.max(0.4, (b - a) * 0.15);
+        // 淡入/淡出都必须在 [a, b] 窗口内完成 —— 淡出若越界(b + fade), 会和下一条字幕同时可见,
+        // 表现为"重影/叠字"(两条文字不同却叠在一起, 极易被误判成重复元素或字体 bug)。
+        // 最后一条不淡出, 一直显示到片尾。
+        const win = b - a;
+        const fin = Math.min(Math.max(0.15, win * 0.06), 0.8);
+        const fout = isLast ? 0 : Math.min(Math.max(0.15, win * 0.06), 0.8);
+        const p1 = Math.min(a + fin, b);          // 淡入完成
+        const p2 = Math.max(p1, b - fout);        // 淡出开始
         return `@keyframes kit-sub-${i}{0%,${a.toFixed(3)}%{opacity:0}` +
-          `${Math.min(a + fade, b).toFixed(3)}%,${b.toFixed(3)}%{opacity:1}` +
-          `${Math.min(b + fade, 100).toFixed(3)}%,100%{opacity:0}}`;
+          `${p1.toFixed(3)}%,${p2.toFixed(3)}%{opacity:1}` +
+          `${b.toFixed(3)}%,100%{opacity:0}}`;
       }).join('');
       const mount = () => {
         const st = document.createElement('style');
@@ -128,6 +136,8 @@ for (const s of slides) {
           + '.kit-sub-2{font-size:.74em;opacity:.88;margin-top:6px;letter-spacing:.01em}' + css;
         (document.head || document.documentElement).appendChild(st);
         const host = document.querySelector('.stage') || document.body;
+        // 幂等: 若 mount 因任何原因被触发多次, 先清掉上一次的挂载, 避免字幕元素累积
+        document.querySelectorAll('.kit-sub').forEach(el => el.remove());
         clauses.forEach((c, i) => {
           const d = document.createElement('div');
           d.className = 'kit-sub';
@@ -147,6 +157,25 @@ for (const s of slides) {
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
       else mount();
     }, { clauses: t.clauses, duration: t.duration });
+
+    // 字幕窗口自检(纯算术, 与页面里生成的 keyframes 同源): 任意时刻最多一条字幕可见。
+    // 越界淡出曾导致两条字幕重叠(视觉上像重影/错字), 这里把它变成显式告警。
+    const pctOf = x => Math.max(0, Math.min(100, (x / t.duration) * 100));
+    for (let i = 0; i < t.clauses.length; i++) {
+      const isLast = i === t.clauses.length - 1;
+      const a = pctOf(t.clauses[i].start);
+      const b = Math.max(pctOf(t.clauses[i + 1]?.start ?? t.duration), a + 0.5);
+      if (!isLast && b - a < 0.6) console.warn(`⚠ ${s.id}: 第 ${i + 1} 句字幕窗口仅 ${(t.duration * (b - a) / 100).toFixed(2)}s, 可能会一闪而过`);
+      if (i > 0) {
+        const prevA = pctOf(t.clauses[i - 1].start);
+        const prevB = Math.max(a, prevA + 0.5);
+        const prevWin = prevB - prevA;
+        const prevOut = Math.min(Math.max(0.15, prevWin * 0.06), 0.8); // 淡出仍在窗口内 → 不越界
+        if (prevB + prevOut > a + 0.001) {
+          console.warn(`⚠ ${s.id}: 第 ${i} 句与第 ${i + 1} 句字幕会同时可见(重叠 ${(t.duration * (prevB + prevOut - a) / 100).toFixed(2)}s)`);
+        }
+      }
+    }
   } else if (SUBS) {
     console.warn(`⚠ ${s.id}: 本张没有 clauses, 不会烧录字幕 —— 若这条片要有字幕, 回 Phase 2 重跑 plan-timings`);
   }

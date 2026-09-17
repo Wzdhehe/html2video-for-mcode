@@ -239,7 +239,8 @@ audio/*.mp3  assets/(含 MANIFEST.md)  research/notes.md  asr/(校验记录)
 | 报"找不到 ffprobe/ffmpeg" | 二进制不在 PATH | 脚本已自动探测 PATH→node_modules→常见位置;装 ffmpeg-static 或 winget install Gyan.FFmpeg |
 | **一部分元素 0 秒就入场、一部分按时序** | 旧版 tokens.css 的延迟被 `.fx-*` 简写覆盖 | 换用新版 tokens.css(延迟走 `--fx-delay`);原理见 authoring.md |
 | 图片主体被裁到画面外 / 图片撑破版式 | 裸放 `<img>`,或 cover 配错比例 | 套 `.img-frame` + `--img-pos` 保主体;截图类改 `.contain`;主体贴边按 SOP 重搜图 |
-| 字幕在深色主题下糊在背景里 | 主题没覆写字幕钩子 | 该主题加 `--sub-bg`(更深)+ `--sub-ring: 1px solid rgba(255,255,255,.16)`;跑 check-theme 验 |
+| 字幕在深色主题下糊在背景里 | 主题没覆写字幕钩子 || 字幕重影/叠字(像两个元素叠一起) | 相邻两句字幕显示窗口重叠(淡出越界到下一条窗口) | 用新版 capture.mjs(淡出在窗口内归零);capture 会自检并告警重叠 |
+ 该主题加 `--sub-bg`(更深)+ `--sub-ring: 1px solid rgba(255,255,255,.16)`;跑 check-theme 验 |
 | 要出竖版(抖音/视频号) | — | `script.json` 设 `width:1080, height:1920`,版式改堆叠(见 authoring.md 竖版章节) |
 | 数字/文字明明写了却看不见 | 未定义 CSS 变量 + `-webkit-text-fill-color: transparent`,整条 background 失效 | 跑 `check-slides.mjs` 定位,补定义或写 `var(--x, 默认值)` |
 | 图片显示 broken 图标 | 文件缺失,或 SVG 本身有问题(XML 错/依赖外部资源/缺尺寸) | `check-slides.mjs` 查路径;SVG 改 inline 进 HTML;capture 也会在渲染时点名哪张没加载 |

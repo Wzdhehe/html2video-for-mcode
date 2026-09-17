@@ -136,6 +136,13 @@
       "name": "broken-image-and-svg-under-file",
       "prompt": "架构图的 SVG 在截图里显示成 broken image, 是 file:// 的兼容性问题吗?",
       "expected_output": "不是协议问题 —— 实测 file:// 下 <img src=\"x.svg\"> 正常加载(400px), PNG 同样正常。broken 的真因通常是 SVG 文件自身: XML 有误、依赖外部资源或 Web 字体(inline 到 img 时被禁)、缺 width/height、或下载失败存成了 HTML。建议一律 inline 进 HTML(彻底绕开)。防线有两道: check-slides.mjs 静态查图片路径缺失/外链并提示 SVG 建议 inline; capture 渲染时会点名哪张图没加载出来(以前是静默出 broken 图标)。"
+    },
+    {
+      "id": 20,
+      "name": "subtitle-overlap",
+      "prompt": "成片里字幕出现重影, 好像有两个元素叠在一起, 是不是字幕被创建了两次?",
+      "expected_output": "不是重复元素 —— DOM 里每条 clause 一个 .kit-sub 是设计如此(元素数=句数)。真因是相邻两句的显示窗口重叠: 淡出曾越界到下一条的窗口(旧实现 min(b+fade,100), fade 取窗口 15%), 导致 0.5–0.9s 内两条不同文字同时可见。修法: 淡入淡出都限制在本句窗口内、切换点归零, 且保持纯 @keyframes 以保证逐帧可 seek —— 不要用 setTimeout/visibility 方案, 那会破坏确定性捕获。capture 现在会自检窗口并告警。",
+      "files": []
     }
   ]
 }
