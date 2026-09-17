@@ -32,6 +32,8 @@
 
 **声音**:BGM 垫底(可选,自动循环与淡入淡出)、ASR 反向校验(音色语种、数字与专名一致性)。
 
+**资料搜集**:`references/research.md` —— 来源四级分级、四条硬规则(多源交叉验证/一手优先/标注口径日期/不确定不进脚本)、query 设计、多源矛盾处理、notes 模板、各环境搜索工具差异(含 mmx search 10 条上限)。
+
 **两套工具链**:mcode 沙箱用 platform connectors;其他 Agent 环境用 mmx-cli(配 TTS)与本仓 `asr.mjs`(配 ASR)。
 
 **已修复的静默故障(均加了闸门)**

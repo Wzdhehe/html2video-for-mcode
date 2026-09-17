@@ -464,7 +464,7 @@ fs.writeFileSync(path.join(dir, 'script.json'), JSON.stringify(scriptJson, null,
 fs.writeFileSync(path.join(dir, 'assets', 'MANIFEST.md'),
   `# 素材清单\n\n| 文件 | 内容 | 来源 | 许可 |\n|---|---|---|---|\n\n<!-- 每个素材一行; 来源必须可核查。禁止使用凭空生成的 logo/截图/头像。选图 SOP 见 references/image-sources.md -->\n`);
 fs.writeFileSync(path.join(dir, 'research', 'notes.md'),
-  `# 调研笔记${topic ? ` · ${topic}` : ''}\n\n## 核心事实\n| 事实 | 数值/表述 | 来源 | 日期 |\n|---|---|---|---|\n\n## 不确定项(不进脚本)\n\n`);
+  `# 调研笔记${topic ? ` · ${topic}` : ''}\n\n## 核心事实\n<!-- 硬规则(见 references/research.md): 关键数字≥2 个独立来源; 一手优先; 标注口径与日期; 查不到出处的不进脚本 -->\n| 事实 | 数值/表述 | 来源(URL/文档) | 口径日期 | 等级(一手/二手/弱) | 第二来源 |\n|---|---|---|---|---|---|\n\n## 不确定项(不进脚本)\n\n## 不该进脚本的内容(传闻/争议/无法核实)\n\n`);
 
 console.log(`已生成项目骨架: ${dir}`);
 console.log(`

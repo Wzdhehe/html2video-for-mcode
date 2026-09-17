@@ -99,9 +99,12 @@ Phase 6 交付
 
 ### Phase 0 · 信息搜集(条件执行)
 
-- 事实性题材(公司、产品、数据、历史事件):必须先搜集。核实关键数字/日期/名称,写 `research/notes.md`:每条事实附来源和日期;查不到的进"不确定项",**不进脚本**。
-- 通用/抒情/创意题材:跳过,直接 Phase 1。
-- **Gate 0**:事实清单给用户过。
+**完整方法见 `references/research.md`**(来源分级、query 设计、矛盾处理、notes 模板)。要点:
+
+- 判断标准很简单:成片里会出现具体**数字、日期、名称、引语或归属关系** → 必须搜集。通用/抒情/创意题材可跳过,但"看起来像事实"的句子仍要核实。
+- **四条硬规则**:① 关键数字**至少 2 个独立来源**(只有一个就用限定措辞或降级为约数);② **一手优先**(官方公告/财报/技术报告/政府统计),二手转述要回溯原文;③ 标注**口径与日期**(年化还是单季?周活还是月活?币种?);④ **查不到出处或无法判定的,进"不确定项",绝不进口播稿**。
+- 输出 `research/notes.md`:每条含 来源 URL + 口径日期 + 等级 + 第二来源;另列"不确定项"与"不该进脚本的内容"。
+- **Gate 0**:事实清单给用户过 —— 重点让用户确认**数字、名称与口径**。
 
 ### Phase 1 · 脚本设计(内容量在这里控制)
 
@@ -217,6 +220,7 @@ audio/*.mp3  assets/(含 MANIFEST.md)  research/notes.md  asr/(校验记录)
 ## 参考文件(按需读,别全读)
 
 - `references/authoring.md` — 17 种版式规范(每种画面必含项)+ 内容量表 + 入场系统用法(含 stage 延迟实现原理)+ 主题速查 + 竖版说明 + 可抄的 HTML 片段
+- `references/research.md` — 资料搜集(来源分级、交叉验证硬规则、query 设计、矛盾处理、notes 模板)
 - `references/image-sources.md` — 配图与素材 SOP(三条取图路径、query 正/反词、两级筛选、图片框用法、裁切硬限制、视觉验证三件套、常见题材索引)
 - `references/tts-and-timing.md` — mcode TTS connector 命令、重试纪律、对时算法、留白与语速调校、实测音色表
 - `references/render.md` — 渲染原理(为什么逐帧步进、字体怎么等)、字幕系统、BGM 混音、ffmpeg 手工命令、排错表
@@ -239,8 +243,7 @@ audio/*.mp3  assets/(含 MANIFEST.md)  research/notes.md  asr/(校验记录)
 | 报"找不到 ffprobe/ffmpeg" | 二进制不在 PATH | 脚本已自动探测 PATH→node_modules→常见位置;装 ffmpeg-static 或 winget install Gyan.FFmpeg |
 | **一部分元素 0 秒就入场、一部分按时序** | 旧版 tokens.css 的延迟被 `.fx-*` 简写覆盖 | 换用新版 tokens.css(延迟走 `--fx-delay`);原理见 authoring.md |
 | 图片主体被裁到画面外 / 图片撑破版式 | 裸放 `<img>`,或 cover 配错比例 | 套 `.img-frame` + `--img-pos` 保主体;截图类改 `.contain`;主体贴边按 SOP 重搜图 |
-| 字幕在深色主题下糊在背景里 | 主题没覆写字幕钩子 || 字幕重影/叠字(像两个元素叠一起) | 相邻两句字幕显示窗口重叠(淡出越界到下一条窗口) | 用新版 capture.mjs(淡出在窗口内归零);capture 会自检并告警重叠 |
- 该主题加 `--sub-bg`(更深)+ `--sub-ring: 1px solid rgba(255,255,255,.16)`;跑 check-theme 验 |
+| 字幕在深色主题下糊在背景里 | 主题没覆写字幕钩子 | 该主题加 `--sub-bg`(更深)+ `--sub-ring: 1px solid rgba(255,255,255,.16)`;跑 check-theme 验 |
 | 要出竖版(抖音/视频号) | — | `script.json` 设 `width:1080, height:1920`,版式改堆叠(见 authoring.md 竖版章节) |
 | 数字/文字明明写了却看不见 | 未定义 CSS 变量 + `-webkit-text-fill-color: transparent`,整条 background 失效 | 跑 `check-slides.mjs` 定位,补定义或写 `var(--x, 默认值)` |
 | 图片显示 broken 图标 | 文件缺失,或 SVG 本身有问题(XML 错/依赖外部资源/缺尺寸) | `check-slides.mjs` 查路径;SVG 改 inline 进 HTML;capture 也会在渲染时点名哪张没加载 |
