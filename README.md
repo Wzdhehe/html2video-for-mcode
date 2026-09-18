@@ -139,8 +139,11 @@ authoring rules, asset-sourcing SOP, TTS/timing notes, and rendering internals.
 
 `preview-page.mjs` writes a self-contained play page to `preview/play/index.html` (open it from
 disk, no server) whose only job is **screening the HTML**: arrows (or a swipe) page through the
-slides, `R` replays the entrance animations, `O` is an overview, and `X` switches to a `no-fx`
-copy — if the picture goes blank, some keyframes never lift the `opacity: 0` base state. There is
+slides, `O` is an overview, and `X` switches to a `no-fx` copy — if the picture goes blank, some
+keyframes never lift the `opacity: 0` base state. With animations on, the arrows **step through the entrance
+level by level** (`→` reveals the next level on the spot and only then turns the page) — nothing waits for a
+timer. `T` compares hard cut against cross-dissolve for the slide change, so the transition can be decided by
+ear and eye before rendering; both toggles sit in the bottom bar. There is
 deliberately no timer, progress bar, or karaoke-style highlight: for timing, watch the finished
 video. The narration panel is data-driven (`P` toggles it): it lists the slide's script lines when
 they exist, is skipped entirely when they do not, and `--no-script` hides it outright — so a deck
@@ -210,7 +213,7 @@ node --test "plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode/te
 node --test "tests/*.test.mjs"
 ```
 
-146 tests in ten files: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
+174 tests in thirteen files: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
 escapes), `no-clobber` (refusing to overwrite), `endpoint-allowlist` (key never leaves the official
 hosts — plus a local server that proves the gate sits before the request), `fetch-policy` (SSRF,
 `file://`, redirect and filename rules), `preview-page` (snapshot timing injection, `base` ordering,
@@ -225,7 +228,7 @@ too), `css-kit` (managed blocks: a block that is present but stale or hand-edite
 and replaced in place, project-side overrides survive, legacy undelimited files get wrapped in
 place with duplicates removed, `--check-css` exit codes, CRLF files must not false-positive,
 pathological interleaving resolves in one run, oversized inputs are refused) and `render-smoke` (init → timings → static gate → capture →
-build, end to end). The render smoke test and three ffmpeg-dependent path checks need ffmpeg and
+build, end to end). Two newer suites cover the second review round and the delivery-quality fixes: `review-round2` (canary tests proving output containment, a local server proving a rejected destination receives **zero** requests, single-quoted/unquoted HTML attributes, ASR request errors counted as failures, ffmpeg discovered from the project) and `cover-transition` (cover image present, `attached_pic` stream embedded, first frame not black, no black frame at any cut point in both hard-cut and cross-dissolve modes, total duration unchanged). The render smoke test and three ffmpeg-dependent path checks need ffmpeg and
 Chromium; where those are missing they skip with a stated reason. The scoped workflow
 `.github/workflows/html2video-for-mcode-smoke.yml` — which lives in the **MiniMax-Code-Plugins
 monorepo** (this standalone repo has no workflows) and runs on the plugin PR and on main —

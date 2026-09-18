@@ -100,8 +100,10 @@ node <skill>/scripts/build-video.mjs ./my-video --asr
 工作流全文(7 阶段、6 个确认闸门)在 `SKILL.md`;`references/` 放着编写规范、配图 SOP、TTS/对时说明与渲染内幕。
 
 `preview-page.mjs` 生成一个自包含的**放映页** `preview/play/index.html`(双击即看,不需要起服务),
-它只干一件事:**把 HTML 画面放一遍** —— `←` `→`(或触屏左右滑)翻页、`R` 重播入场动画、`O` 总览、
+它只干一件事:**把 HTML 画面放一遍** —— `←` `→`(或触屏左右滑)翻页、`O` 总览、
 `X` 切到同张的 `no-fx` 副本(切过去画面**变空**就说明有关键帧没把 `opacity:0` 的基础态抬回来)。
+动效开时箭头是**逐级入场**(按 → 先出下一级,出完才翻页),不等计时器;`T` 现场对比**硬切 / 交叉溶解**
+(切页方式渲染前就能定)。两个开关都在底栏。
 **刻意不做计时器、进度条、跟读高亮** —— 要看时间或节奏就直接看成片。口播文案面板按数据自动决定:
 有文案就列出(`P` 可开/关),没有就整个不出,`--no-script` 也能强制不要 —— 口播还没做时照样能先看画面。
 布局一路适配到手机(面板收成可收起的底部抽屉,出现触摸按钮)。副本按 `timings.json` **注入实测延迟**,
@@ -142,7 +144,7 @@ node --test "plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode/te
 node --test "tests/*.test.mjs"
 ```
 
-十个文件共 146 例:`safe-paths`(恶意 slide id / 路径、canary 完好性、符号链接逃逸)、`no-clobber`(覆盖拒绝)、`endpoint-allowlist`(Key 不离开官方域,并用本地服务器证明闸门在请求之前)、`fetch-policy`(SSRF、`file://`、重定向与文件名规则、**IPv4-mapped IPv6 十六进制形式**)、`preview-page`(快照注入实测延迟、`base` 顺序、自包含无外链、越界拒绝、无计时器、**竖版画布、iframe 强制相对解析**)、`tokens-fx`(模板里每个入场动画的关键帧必须声明 `opacity`、`no-fx` 必须重置基础态、`--upgrade-css` 幂等)、`chart-kit`(模板里真带着图表工具箱:keyframes / 注册属性 /「关动效 = 终态」不变量)、`table-kit`(表格原语的可读性硬指标:正文号、行高 ≥72px、涨跌走令牌、矩阵高亮列覆盖表头)、`css-kit`(工具箱受管块:块在但 rev 旧 / 被手工改过必须检出并原地修复、项目端覆写不被压掉、老文件原地包裹去重、`--check-css` 退出码、**CRLF 不误报、病态互踩一次到位、超大输入拒绝**)与 `render-smoke`(init → 对时 → 静态闸门 → 截图 → 成片全链,**still 复截后静态回退必须点名警告**)。渲染冒烟与三例依赖 ffmpeg 的路径检查需要 ffmpeg 与 Chromium:缺失时按原因 skip;scoped workflow `.github/workflows/html2video-for-mcode-smoke.yml`(**位于 MiniMax-Code-Plugins monorepo,本独立仓没有 workflow**)会在插件 PR 与 main 上装齐依赖并把全部用例真跑一遍。
+十一个文件共 174 例:`safe-paths`(恶意 slide id / 路径、canary 完好性、符号链接逃逸)、`no-clobber`(覆盖拒绝)、`endpoint-allowlist`(Key 不离开官方域,并用本地服务器证明闸门在请求之前)、`fetch-policy`(SSRF、`file://`、重定向与文件名规则、**IPv4-mapped IPv6 十六进制形式**)、`preview-page`(快照注入实测延迟、`base` 顺序、自包含无外链、越界拒绝、无计时器、**竖版画布、iframe 强制相对解析**)、`tokens-fx`(模板里每个入场动画的关键帧必须声明 `opacity`、`no-fx` 必须重置基础态、`--upgrade-css` 幂等)、`chart-kit`(模板里真带着图表工具箱:keyframes / 注册属性 /「关动效 = 终态」不变量)、`table-kit`(表格原语的可读性硬指标:正文号、行高 ≥72px、涨跌走令牌、矩阵高亮列覆盖表头)、`css-kit`(工具箱受管块:块在但 rev 旧 / 被手工改过必须检出并原地修复、项目端覆写不被压掉、老文件原地包裹去重、`--check-css` 退出码、**CRLF 不误报、病态互踩一次到位、超大输入拒绝**)与 `render-smoke`(init → 对时 → 静态闸门 → 截图 → 成片全链,**still 复截后静态回退必须点名警告**)。、`review-round2`(输出收监 canary:项目内符号链接不得写到项目外;本地服务器证明被拒目标收到 0 个请求;单引号属性;ASR 请求失败必须计入失败;项目内 ffmpeg 发现)与 `cover-transition`(封面 + `attached_pic` 流 + 首帧非黑 + 硬切/溶解两种模式下切页点均无黑帧且总时长不变);渲染冒烟与三例依赖 ffmpeg 的路径检查需要 ffmpeg 与 Chromium:缺失时按原因 skip;scoped workflow `.github/workflows/html2video-for-mcode-smoke.yml`(**位于 MiniMax-Code-Plugins monorepo,本独立仓没有 workflow**)会在插件 PR 与 main 上装齐依赖并把全部用例真跑一遍。
 
 ## 排错
 
