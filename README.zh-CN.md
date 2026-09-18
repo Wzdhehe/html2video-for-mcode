@@ -28,7 +28,7 @@ my-video/
 
 ## 流水线
 
-一个技能驱动 11 个脚本(`skills/html2video-for-mcode/scripts/`):
+一个技能驱动 13 个脚本(`skills/html2video-for-mcode/scripts/`):
 
 | 阶段 | 做什么 |
 |---|---|
@@ -88,11 +88,18 @@ node <skill>/scripts/init-project.mjs ./my-video --topic "我的主题"
 # 合成 audio/01.mp3 … audio/08.mp3
 node <skill>/scripts/plan-timings.mjs ./my-video     # 实测音频 → timings.json
 node <skill>/scripts/check-slides.mjs ./my-video     # 渲染前静态闸门
+node <skill>/scripts/capture.mjs ./my-video --mode still
+node <skill>/scripts/preview-page.mjs ./my-video --open   # 放映页: 用户自己先过一遍
 node <skill>/scripts/capture.mjs ./my-video --mode motion
 node <skill>/scripts/build-video.mjs ./my-video --asr
 ```
 
 工作流全文(7 阶段、6 个确认闸门)在 `SKILL.md`;`references/` 放着编写规范、配图 SOP、TTS/对时说明与渲染内幕。
+
+`preview-page.mjs` 生成一个自包含的**放映页** `preview/play/index.html`(双击即看,不需要起服务):
+`←` `→` 翻页、`R` 重播入场动画、`P` 看当前张的口播、`O` 总览、`X` 切到同张的 `no-fx` 副本 ——
+切过去画面**变空**就说明有关键帧没把 `opacity:0` 的基础态抬回来。放映页的副本按 `timings.json`
+**注入实测延迟**,所以浏览器里看到的时序就是成片时序(直接打开 `slides/*.html` 不是:那些文件里是占位延迟)。
 
 ## 支持平台
 
@@ -125,7 +132,7 @@ Windows / macOS / Linux。脚本全部是 Node ESM,不依赖特定 shell。Windo
 node --test "plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode/tests/*.test.mjs"
 ```
 
-五个文件共 72 例:`safe-paths`(恶意 slide id / 路径、canary 完好性、符号链接逃逸)、`no-clobber`(覆盖拒绝)、`endpoint-allowlist`(Key 不离开官方域,并用本地服务器证明闸门在请求之前)、`fetch-policy`(SSRF、`file://`、重定向与文件名规则)、`render-smoke`(init → 对时 → 静态闸门 → 截图 → 成片全链)。渲染冒烟与三例依赖 ffmpeg 的路径检查需要 ffmpeg 与 Chromium:缺失时按原因 skip,scoped workflow `.github/workflows/html2video-for-mcode-smoke.yml` 会装齐依赖并把全部用例真跑一遍。
+七个文件共 93 例:`safe-paths`(恶意 slide id / 路径、canary 完好性、符号链接逃逸)、`no-clobber`(覆盖拒绝)、`endpoint-allowlist`(Key 不离开官方域,并用本地服务器证明闸门在请求之前)、`fetch-policy`(SSRF、`file://`、重定向与文件名规则)、`preview-page`(快照注入实测延迟、`base` 顺序、自包含无外链、越界拒绝)、`tokens-fx`(模板里每个入场动画的关键帧必须声明 `opacity`、`no-fx` 必须重置基础态、`--upgrade-css` 幂等)与 `render-smoke`(init → 对时 → 静态闸门 → 截图 → 成片全链)。渲染冒烟与三例依赖 ffmpeg 的路径检查需要 ffmpeg 与 Chromium:缺失时按原因 skip,scoped workflow `.github/workflows/html2video-for-mcode-smoke.yml` 会装齐依赖并把全部用例真跑一遍。
 
 ## 排错
 

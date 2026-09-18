@@ -30,7 +30,7 @@ my-video/
 
 ## Pipeline
 
-One Skill drives an 11-script pipeline (`skills/html2video-for-mcode/scripts/`):
+One Skill drives a 13-script pipeline (`skills/html2video-for-mcode/scripts/`):
 
 | Stage | What happens |
 |---|---|
@@ -102,12 +102,22 @@ node <skill>/scripts/init-project.mjs ./my-video --topic "My topic"
 # synthesize audio/01.mp3 … audio/08.mp3
 node <skill>/scripts/plan-timings.mjs ./my-video     # measure audio → timings.json
 node <skill>/scripts/check-slides.mjs ./my-video     # static gate before rendering
+node <skill>/scripts/capture.mjs ./my-video --mode still
+node <skill>/scripts/preview-page.mjs ./my-video --open   # play page: screen it yourself first
 node <skill>/scripts/capture.mjs ./my-video --mode motion
 node <skill>/scripts/build-video.mjs ./my-video --asr
 ```
 
 `SKILL.md` carries the full workflow (7 phases, 6 confirmation gates); `references/` holds the
 authoring rules, asset-sourcing SOP, TTS/timing notes, and rendering internals.
+
+`preview-page.mjs` writes a self-contained play page to `preview/play/index.html` (open it from
+disk, no server): arrow keys page through the slides, `R` replays the entrance animations,
+`P` shows the narration lines for the current slide, `O` is an overview, and `X` switches to a
+`no-fx` copy of the same slide — if the picture goes blank, some keyframes never lift the
+`opacity: 0` base state. The page loads snapshots with the **measured** stage delays injected
+from `timings.json`, so what you see in the browser matches the timing of the final video
+(opening `slides/*.html` directly does not — those files carry placeholder delays).
 
 ## Supported platforms
 
@@ -162,11 +172,13 @@ The Skill ships an executable test suite (`skills/html2video-for-mcode/tests/`, 
 node --test "plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode/tests/*.test.mjs"
 ```
 
-72 tests in five files: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
+93 tests in seven files: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
 escapes), `no-clobber` (refusing to overwrite), `endpoint-allowlist` (key never leaves the official
 hosts — plus a local server that proves the gate sits before the request), `fetch-policy` (SSRF,
-`file://`, redirect and filename rules) and `render-smoke` (init → timings → static gate → capture
-→ build, end to end). The render smoke test and three ffmpeg-dependent path checks need ffmpeg and
+`file://`, redirect and filename rules), `preview-page` (snapshot timing injection, `base` ordering,
+self-containment, containment refusals) and `tokens-fx` (every entrance animation in the generated
+`tokens.css` must declare `opacity`, `no-fx` must reset it, `--upgrade-css` is idempotent), plus
+`render-smoke` (init → timings → static gate → capture → build, end to end). The render smoke test and three ffmpeg-dependent path checks need ffmpeg and
 Chromium; where those are missing they skip with a stated reason, and the scoped workflow
 `.github/workflows/html2video-for-mcode-smoke.yml` installs them and runs everything for real.
 
