@@ -1,0 +1,49 @@
+# html2video-for-mcode · Linux CI
+# 本仓库根就是技能目录(fork 上的 scoped smoke workflow 要等宿主维护者批准才会首跑),
+# 这里在自己的仓库里以同样的依赖组合(ubuntu + ffmpeg + chromium)把 tests/ 下全部测试
+# 真实执行 —— 尤其是三条需要**文件符号链接**能力的 canary: Windows 无开发者模式时建不了
+# 文件链接, 本地一直只能跳过, Linux 上是它们第一次真正运行。
+#
+# 依赖放置的坑(实测): 仓库根没有 package.json(技能目录不带 npm 清单), 而 npm 11 在
+# 无清单目录里 `npm install --no-save <pkg>` 会**静默不装**(exit 0, node_modules 为空)。
+# 所以先 `npm init -y` 造临时清单 → 装(不落 lockfile) → 删清单。playwright 落在仓库根
+# node_modules: scripts/ 与 tests/ 的 loadPackage 按模块自身位置向上解析即命中。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: all tests (ubuntu-latest · ffmpeg + chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Install playwright (throwaway manifest, nothing committed)
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save --no-package-lock playwright
+          rm package.json
+          npx playwright install --with-deps chromium
+
+      # glob 交给 shell 展开: 以后新增测试文件自动进 CI(旧枚举写法漏过 8 个文件)。
+      # 单测超时 300s: 渲染冒烟里的 capture / build-video 在 CI 上要几十秒。
+      - name: All tests (security · policy · css blocks · render smoke · symlink canaries)
+        run: node --test --test-timeout=300000 tests/*.test.mjs
