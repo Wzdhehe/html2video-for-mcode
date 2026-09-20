@@ -145,7 +145,7 @@ describe('二审 · 输出收监(项目内目录段是符号链接时, 不得写
     // 注意: planted 本身就是个存在的路径(链接), 不能用 existsSync 断言"没出现"(必真) ——
     // 用目录前后 diff 断言"没有**新**条目"(1.7.7 canary 的这个断言被十一轮 review 抓到不可满足)。
     const before = new Set(fs.readdirSync(path.join(proj, 'audio')));
-    const r = await runSkillAsync('asr.mjs', [proj, '--file', big,
+    const r = await runSkillAsync('asr.mjs', [proj, '--file', big, '--provider', 'api',
       '--allow-any-endpoint', '--base-url', 'http://127.0.0.1:9'],   // 转码后请求死端口 → 快速失败, 不碰真网
       { env: { ...process.env, MINIMAX_API_KEY: 'fake-key-for-test' } });
     assert.notEqual(r.status, 0, '死端口请求必须失败(转码在前, 网络在后)');
@@ -227,7 +227,7 @@ describe('二审 · ASR 请求错误必须算失败并非零退出', () => {
     fs.mkdirSync(path.join(proj, 'asr'), { recursive: true });
     fs.writeFileSync(path.join(proj, 'asr', 'part-01-1.mp3'), 'not-really-mp3');
     try {
-      const r = await runSkillAsync('asr.mjs', [proj, '--allow-any-endpoint', '--base-url', `http://127.0.0.1:${port}`], {
+      const r = await runSkillAsync('asr.mjs', [proj, '--provider', 'api', '--allow-any-endpoint', '--base-url', `http://127.0.0.1:${port}`], {
         cwd: proj, env: { ...process.env, MINIMAX_API_KEY: 'fake-key-for-test', MINIMAX_REGION: 'cn' },
       });
       assert.notEqual(r.status, 0, `请求失败不能被当成通过: ${r.stdout}${r.stderr}`);

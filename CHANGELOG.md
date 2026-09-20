@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.0 — 2026-09-20
+
+**ASR toolchain simplification: `mmx speech transcribe` is now the default provider (mmx-cli ≥ 1.0.26, merged upstream in MiniMax-AI/cli#262)**
+
+- `scripts/asr.mjs` now picks its provider automatically: with mmx-cli ≥ 1.0.26 on `PATH` it shells out to `mmx speech transcribe` — the same login as TTS, so the API key never passes through this script at all. Results are staged through a dedicated `os.tmpdir()` scratch directory before landing in jailed paths; the external CLI never touches user paths directly. `--provider api` forces the previous direct-REST path for environments without mmx-cli, and `--from` (offline compare) no longer trips the missing-key gate.
+- The capability probe reads `mmx --version` — `--help` exits 0 even for unknown subcommands, so it cannot gate. On Windows the CLI is invoked through `cmd.exe /c` because Node cannot spawn npm-global commands directly (bare name → ENOENT, `.cmd` → EINVAL).
+- The endpoint allowlist is unchanged and provider-independent: a non-official `--base-url` / `MINIMAX_BASE_URL` is still rejected before any provider resolution.
+- Docs corrected where they claimed "mmx-cli has no ASR subcommand" (false since 1.0.26): SKILL.md (scripts table, runtime comparison table, first-time setup, Phase 5), `references/tts-and-timing.md` (ASR paths B/C), and both READMEs' requirements/disclosure bullets — the mmx provider spends the same paid, quota-metered MiniMax account as REST.
+- Tests +4 (invalid `--provider` guidance; keyless `--provider api` guidance; an mmx-shim integration pair asserting the exact argv mapping — `speech transcribe --model asr-1.0 --response-format … --timestamp-level … --language …` — tmpdir staging/cleanup, and failure passthrough with the upgrade hint). REST-stub tests now pin `--provider api` so they stay deterministic on machines that do have mmx. **248 tests / 14 files**: verified locally with tools (245 pass / 0 fail / 3 capability skips) and end-to-end against real mmx 1.0.26 (keyless run, transcript exact including the number).
+
 ## 1.8.1 — 2026-09-19
 
 **Thirteenth-review residue (found by the independent sweep over the published `e845cbd8` tree): `SKILL.md` was the one install surface 1.8.0 left behind**

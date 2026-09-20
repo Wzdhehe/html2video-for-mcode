@@ -146,16 +146,23 @@ build-video `--asr` cuts `asr/part-<id>-<k>.mp3` **by sentence** (sentence k of 
 2. `mcode-tools connector call connector__matrix__listen_audio --args '{"audio_info": {"url": "<URL>"}}'`.
 3. Compare the transcript against the "expected narration" in the checklist: numbers, years and product names must match exactly; homophone/punctuation differences are acceptable.
 
-**Path B · direct REST (any environment, the same single API Key; mmx-cli has no ASR subcommand)**
+**Path B · mmx-cli (any environment, the same login as TTS — mmx-cli ≥ 1.0.26 ships `speech transcribe`)**
+
+```bash
+node scripts/asr.mjs <项目目录>          # 默认走 mmx speech transcribe, 不需要配 Key → 逐句转写 → 自动比对 → 回填 asr/checklist.md
+```
+
+**Path C · direct REST (fallback for environments without mmx-cli, the same single API Key)**
 
 ```bash
 export MINIMAX_API_KEY=sk-xxx          # 与 mmx-cli 同一把; 海外套餐加 MINIMAX_REGION=global
-node scripts/asr.mjs <项目目录>          # 逐句转写 → 自动比对 → 回填 asr/checklist.md
+node scripts/asr.mjs <项目目录> --provider api
 ```
 
+- Both paths hit the same backend, share the same limits, and differ only in who holds the credentials; `--provider mmx|api` forces one explicitly (the default auto-picks mmx when ≥ 1.0.26 is on PATH).
 - The script performs the **comparison verdict** automatically: numbers mismatched, or traditional characters appearing (suspected Cantonese) → ✗ and the process exits non-zero; low similarity → ⚠ pending review.
 - If the audio exceeds the API limits (>500s or >50MB) it is automatically transcoded with ffmpeg to mono 16k mp3 before upload; no manual handling needed.
-- If you already have transcripts (e.g. produced with whisper in another environment) you can feed them straight in for comparison: `node scripts/asr.mjs <项目> --from transcripts.json` (JSON shaped like `{"part-01-1": "文本"}`).
+- If you already have transcripts (e.g. produced with whisper in another environment) you can feed them straight in for comparison (no network needed): `node scripts/asr.mjs <项目> --from transcripts.json` (JSON shaped like `{"part-01-1": "文本"}`).
 - If you want **word-level timestamps to measure each sentence's onset** (more accurate than silence detection; the API supports `timestamp_level: word`): `node scripts/asr.mjs <项目> --verify-timing`, which outputs an "estimate vs ASR-measured" comparison table; if the deviation is large, adjust `clauses[].start` in `timings.json` per the results and re-render.
 
 For slides that don't pass: change the narration or redo that segment's TTS → re-run plan-timings → delete `build/frames/<id>/` and `out/slide-<id>.mp4` → re-run capture (that slide) and build-video. Don't redo the whole video.

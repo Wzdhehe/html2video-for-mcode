@@ -1,17 +1,20 @@
 #!/usr/bin/env node
-// html2video-for-mcode · 语音识别(ASR):直接调 MiniMax REST 接口, 任何 Agent 环境都能用
-// 只需要与 mmx-cli 同一把 API Key(不走 mcode connector, 也不依赖本机 whisper)。
+// html2video-for-mcode · 语音识别(ASR):两条路径 —— ①mmx cli ≥1.0.26 的 `speech transcribe`
+// (缺省首选; 与 TTS 同一套 mmx 登录, Key 全程不经本脚本); ②直连 MiniMax REST 接口(--provider api,
+// 与 mmx 同一把 API Key; 不走 mcode connector, 也不依赖本机 whisper)。
 //
 // 用法:
 //   node asr.mjs <项目目录>                     转写 asr/part-*.mp3, 与 checklist 的预期文本比对并回填
 //   node asr.mjs <项目目录> --verify-timing     用段/字级时间戳实测每句开口时刻, 对比 timings.json(比静音检测更准)
 //   node asr.mjs --file <音频> [--format json|verbose_json|srt|vtt] [--timestamp word] [--language zh]
-//            [--out <项目内相对路径>](落盘转写结果; 已存在需 --force; 绝对路径/越出项目目录一律拒绝)
+//            [--provider mmx|api] [--out <项目内相对路径>](落盘转写结果; 已存在需 --force; 绝对路径/越出项目目录一律拒绝)
 //
-// Key 来源(按序): --api-key sk-xxx → 环境变量 MINIMAX_API_KEY
-// 区域(按序): --base-url → 环境变量 MINIMAX_BASE_URL → MINIMAX_REGION(cn=api.minimaxi.com / global=api.minimax.io)
-// 端点安全: Key 只发上面两个官方域; 其他 --base-url/MINIMAX_BASE_URL 一律拒绝, 自建网关需显式 --allow-any-endpoint。
-// 接口约束(官方文档): wav/aiff/flac/m4a/mp3/aac/opus/ogg; 时长 ≤500s; 大小 ≤50MB。
+// 提供方: --provider mmx|api 显式指定; 缺省时 PATH 上有 mmx ≥1.0.26 就走 mmx, 否则走 api。
+//   mmx 路径: 转写结果先落 os.tmpdir() 中转文件, 再由本脚本写进受监路径 —— 外部 CLI 不直接碰用户路径。
+//   api 路径 Key 来源(按序): --api-key sk-xxx → 环境变量 MINIMAX_API_KEY
+//   api 区域(按序): --base-url → 环境变量 MINIMAX_BASE_URL → MINIMAX_REGION(cn=api.minimaxi.com / global=api.minimax.io)
+// 端点安全(仅 api 路径发 Key): Key 只发上面两个官方域; 其他 --base-url/MINIMAX_BASE_URL 一律拒绝, 自建网关需显式 --allow-any-endpoint。
+// 接口约束(官方文档, 两路径同一后端同一约束): wav/aiff/flac/m4a/mp3/aac/opus/ogg; 时长 ≤500s; 大小 ≤50MB。
 //   超限时本脚本会用 ffmpeg 自动转成单声道 16k mp3 再传(识别率不受影响)。
 import fs from 'node:fs';
 import os from 'node:os';
@@ -47,12 +50,54 @@ const LANG = flagValue(argv, '--language', '');          // zh / yue / en ... �
 const FORMAT = flagValue(argv, '--format', 'json');
 const TS = flagValue(argv, '--timestamp', '');           // '' | sentence | word
 
-if (!KEY) {
+// ── 提供方选择: mmx cli(≥1.0.26 speech transcribe) 或 直连 REST ──
+const PROVIDER = flagValue(argv, '--provider', '');
+if (PROVIDER && PROVIDER !== 'mmx' && PROVIDER !== 'api') {
+  console.error(`✗ --provider 只认 mmx|api(收到 ${PROVIDER})。mmx = mmx cli ≥1.0.26 的 speech transcribe; api = 直连 REST`);
+  process.exit(1);
+}
+// Windows 上 node 不能直接 spawn npm 全局命令(裸名 ENOENT、.cmd 无 shell 是 EINVAL),
+// 只能经 cmd.exe /c; 引号按 cmd 规则手工处理(路径含空格必须保住)。
+const IS_WIN = process.platform === 'win32';
+const mmxRun = (args, opts = {}) => IS_WIN
+  ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', ['mmx', ...args].map(a => /[\s"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a).join(' ')], { encoding: 'utf8', windowsHide: true, ...opts })
+  : spawnSync('mmx', args, { encoding: 'utf8', windowsHide: true, ...opts });
+// 探测不能靠 --help(未知子命令的 --help 也退 0), 认版本号: ≥1.0.26 才有 speech transcribe
+let mmxProbe;
+const mmxUsable = () => {
+  if (mmxProbe === undefined) {
+    const r = mmxRun(['--version']);
+    const m = r.status === 0 ? String(r.stdout || '').match(/(\d+)\.(\d+)\.(\d+)/) : null;
+    mmxProbe = !!(m && (+m[1] > 1 || (+m[1] === 1 && (+m[2] > 0 || +m[3] >= 26))));
+  }
+  return mmxProbe;
+};
+const USE_MMX = PROVIDER === 'mmx' ? true : (!PROVIDER && mmxUsable());
+if (PROVIDER === 'mmx' && !mmxUsable()) {
+  console.error('✗ --provider mmx 但 PATH 上的 mmx 没有 speech transcribe(要 ≥1.0.26): npm i -g mmx-cli@latest\n  (或改用 --provider api + MINIMAX_API_KEY 直连 REST)');
+  process.exit(1);
+}
+
+// --from <file.json>: 不打网络, 直接用已有转写结果(JSON: { "part-01-1.mp3": "文本", ... }
+// 或 { "part-01-1": "文本" })做比对与回填 —— 例如你在别的环境用 whisper 转写完再进来核对。
+const FROM = (() => {
+  const f = flagValue(argv, '--from');
+  if (!f) return null;
+  if (!fs.existsSync(f)) { console.error(`✗ 找不到 --from 文件: ${f}`); process.exit(1); }
+  return JSON.parse(fs.readFileSync(f, 'utf8'));
+})();
+const fromLookup = name => {
+  if (!FROM) return null;
+  const base = name.replace(/\.[^.]+$/, '');
+  return FROM[name] ?? FROM[base] ?? FROM[path.basename(name)] ?? FROM[path.basename(base)] ?? null;
+};
+
+if (!USE_MMX && !KEY && !FROM) {
   console.error([
-    '✗ 缺 API Key(ASR 需要与 mmx-cli 同一把 Key)。三选一:',
-    '  1) export MINIMAX_API_KEY=sk-xxx      (推荐, 只存在环境里)',
-    '  2) node asr.mjs <项目> --api-key sk-xxx',
-    '  3) 海外套餐加 MINIMAX_REGION=global(或 --base-url https://api.minimax.io)',
+    '✗ ASR 两条路径都没就绪, 二选一:',
+    '  1) mmx cli(≥1.0.26, 推荐, 与 TTS 同一套登录): npm i -g mmx-cli@latest && mmx auth login --api-key sk-xxx',
+    '  2) 直连 REST(后备): export MINIMAX_API_KEY=sk-xxx 或 node asr.mjs <项目> --api-key sk-xxx',
+    '     海外套餐加 MINIMAX_REGION=global(或 --base-url https://api.minimax.io)',
     '  查额度与身份: mmx quota / mmx auth status',
   ].join('\n'));
   process.exit(2);
@@ -77,6 +122,28 @@ function prepareForUpload(file) {
 async function transcribe(file, { format = FORMAT, ts = TS, language = LANG } = {}) {
   const { file: up, tmpDir } = prepareForUpload(file);
   try {
+    // mmx 路径: 结果先落 os.tmpdir() 专属目录, 由本脚本读回再写受监路径 —— 外部 CLI 不碰用户路径
+    if (USE_MMX) {
+      const mmxTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'asr-mmx-'));
+      try {
+        const doc = path.join(mmxTmp, format === 'srt' ? 'out.srt' : format === 'vtt' ? 'out.vtt' : 'out.json');
+        const args = ['speech', 'transcribe', '--file', up, '--model', 'asr-1.0', '--response-format', format, '--out', doc];
+        if (ts) args.push('--timestamp-level', ts);
+        if (language) args.push('--language', language);
+        const r = mmxRun(args, { timeout: 180000 });
+        if (r.error || r.status !== 0) {
+          const t = String((r.stderr || '') + (r.stdout || '')).trim();
+          throw new Error(`mmx speech transcribe 失败${r.error ? `(${r.error.code || r.error.message})` : `(exit ${r.status})`}: ${t.slice(0, 300)}\n  → 检查 mmx auth login / 网络; 老版本没有该子命令: npm i -g mmx-cli@latest(≥1.0.26)`);
+        }
+        if (!fs.existsSync(doc) || !fs.statSync(doc).size) throw new Error('mmx speech transcribe 没有产出结果文件(--out)');
+        const raw = fs.readFileSync(doc, 'utf8');
+        if (format === 'srt' || format === 'vtt') return { text: raw, raw };
+        const j = JSON.parse(raw);
+        return { text: j.text ?? '', duration: j.duration, segments: j.segments, n_speakers: j.n_speakers, raw: j };
+      } finally {
+        fs.rmSync(mmxTmp, { recursive: true, force: true });
+      }
+    }
     const fd = new FormData();
     fd.append('model', 'asr-1.0');
     fd.append('response_format', format);
@@ -106,20 +173,6 @@ async function transcribe(file, { format = FORMAT, ts = TS, language = LANG } = 
     if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
-
-// --from <file.json>: 不打网络, 直接用已有转写结果(JSON: { "part-01-1.mp3": "文本", ... }
-// 或 { "part-01-1": "文本" })做比对与回填 —— 例如你在别的环境用 whisper 转写完再进来核对。
-const FROM = (() => {
-  const f = flagValue(argv, '--from');
-  if (!f) return null;
-  if (!fs.existsSync(f)) { console.error(`✗ 找不到 --from 文件: ${f}`); process.exit(1); }
-  return JSON.parse(fs.readFileSync(f, 'utf8'));
-})();
-const fromLookup = name => {
-  if (!FROM) return null;
-  const base = name.replace(/\.[^.]+$/, '');
-  return FROM[name] ?? FROM[base] ?? FROM[path.basename(name)] ?? FROM[path.basename(base)] ?? null;
-};
 
 // ── 文本比对:数字必须一致(硬要求), 出现繁体字/相似度过低则判不通过 ──
 const norm = s => String(s || '').replace(/[\s，。、；：！？,.;:!?"'“”‘’()（）\-—…]/g, '');

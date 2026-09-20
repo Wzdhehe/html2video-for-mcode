@@ -120,8 +120,10 @@ npm i playwright && npx playwright install chromium
   (`npm i -g mmx-cli && mmx auth login --api-key sk-...`), or your own TTS written to
   `audio/<id>.mp3`. Both mcode connectors and `mmx-cli`/REST spend a **MiniMax account's paid,
   quota-metered balance** — the account is a required, billable service charged per character/minute.
-- Optional: `MINIMAX_API_KEY` for `scripts/asr.mjs`, which transcribes the voiceover and compares
-  it against the script (numbers, proper nouns, and spoken language). The key belongs to the same
+- **Reverse ASR verification** via `scripts/asr.mjs`, which transcribes the voiceover and compares
+  it against the script (numbers, proper nouns, and spoken language). Defaults to `mmx speech
+  transcribe` (mmx-cli ≥ 1.0.26 — the same login as TTS, no key handling needed); without mmx-cli,
+  `--provider api` + `MINIMAX_API_KEY` calls REST directly. Either path spends the same
   **paid, quota-metered MiniMax account**; each transcription call is billed by audio duration.
 
 ## Quick start
@@ -211,8 +213,9 @@ No telemetry, no analytics, no hidden endpoints, no installers, no native binari
   to a copy included — are kept and reported; a `tokens.css.bak` backup is written first. Put your
   own rules **after** the region, or the region's values win. `--check-css` reports staleness
   without changing anything.
-- No credentials are stored or embedded: the ASR script reads a key from `MINIMAX_API_KEY` or
-  `--api-key` at runtime and never writes it anywhere.
+- No credentials are stored or embedded: with the default mmx provider the script never touches a
+  key at all (mmx holds its own login); on the `--provider api` path it reads a key from
+  `MINIMAX_API_KEY` or `--api-key` at runtime and never writes it anywhere.
 - `KIT_PROJECT_DIR` is internal plumbing, set automatically by the CLI entry points so shared
   helpers can locate the project directory; you never need to set it yourself.
 
@@ -228,9 +231,11 @@ node --test "plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode/te
 node --test "tests/*.test.mjs"
 ```
 
-244 tests in fourteen files: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
+248 tests in fourteen files: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
 escapes including a **dangling** link that must be caught rather than skipped), `no-clobber` (refusing to overwrite), `endpoint-allowlist` (key never leaves the official
-hosts — plus a local server that proves the gate sits before the request), `fetch-policy` (SSRF,
+hosts — plus a local server that proves the gate sits before the request, and provider selection:
+`mmx speech transcribe` default vs `--provider api` fallback, with an mmx-shim integration pair
+asserting the exact argv mapping and tmpdir staging/cleanup), `fetch-policy` (SSRF,
 `file://`, redirect and filename rules), `preview-page` (snapshot timing injection, `base` ordering,
 self-containment, containment refusals, the no-timer rule), `tokens-fx` (every entrance animation in
 the generated `tokens.css` must declare `opacity`, `no-fx` must reset it, `--upgrade-css` is
