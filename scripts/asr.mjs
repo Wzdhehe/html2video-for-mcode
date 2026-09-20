@@ -10,7 +10,8 @@
 //            [--provider mmx|api] [--out <项目内相对路径>](落盘转写结果; 已存在需 --force; 绝对路径/越出项目目录一律拒绝)
 //
 // 提供方: --provider mmx|api 显式指定; 缺省时 PATH 上有 mmx ≥1.0.26 就走 mmx, 否则走 api。
-//   mmx 路径: 转写结果先落 os.tmpdir() 中转文件, 再由本脚本写进受监路径 —— 外部 CLI 不直接碰用户路径。
+//   mmx 路径: 输入音频按原路径**只读**交给 CLI; 转写输出先落 os.tmpdir() 专属中转文件, 再由本脚本
+//   写进受监路径(CLI 拿不到任何写回路径), 且子进程环境里剥掉 MINIMAX_API_KEY/MINIMAX_BASE_URL。
 //   api 路径 Key 来源(按序): --api-key sk-xxx → 环境变量 MINIMAX_API_KEY
 //   api 区域(按序): --base-url → 环境变量 MINIMAX_BASE_URL → MINIMAX_REGION(cn=api.minimaxi.com / global=api.minimax.io)
 // 端点安全(仅 api 路径发 Key): Key 只发上面两个官方域; 其他 --base-url/MINIMAX_BASE_URL 一律拒绝, 自建网关需显式 --allow-any-endpoint。
@@ -57,10 +58,13 @@ if (PROVIDER && PROVIDER !== 'mmx' && PROVIDER !== 'api') {
   process.exit(1);
 }
 // Windows 上 node 不能直接 spawn npm 全局命令(裸名 ENOENT、.cmd 无 shell 是 EINVAL),
-// 只能经 cmd.exe /c; 引号按 cmd 规则手工处理(路径含空格必须保住)。
+// 只能经 cmd.exe /c。引用不能只看空格: 合法文件名里的 & | < > ( ) ^ 是 cmd 控制符,
+// 不加引号会被截断/改义 —— 命中任一元字符就整段引用, 引号本身双写。
+// (残留限制: cmd 在引号内仍展开 %VAR%; 文件名恰含同名环境变量时 mmx 会拿到错路径然后响亮失败 ——
+//  用户自己的机器自己的路径, 不是信任边界, 记录在案即可。)
 const IS_WIN = process.platform === 'win32';
 const mmxRun = (args, opts = {}) => IS_WIN
-  ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', ['mmx', ...args].map(a => /[\s"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a).join(' ')], { encoding: 'utf8', windowsHide: true, ...opts })
+  ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', ['mmx', ...args].map(a => /[\s"&|<>^()%]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a).join(' ')], { encoding: 'utf8', windowsHide: true, ...opts })
   : spawnSync('mmx', args, { encoding: 'utf8', windowsHide: true, ...opts });
 // 探测不能靠 --help(未知子命令的 --help 也退 0), 认版本号: ≥1.0.26 才有 speech transcribe
 let mmxProbe;
@@ -122,7 +126,8 @@ function prepareForUpload(file) {
 async function transcribe(file, { format = FORMAT, ts = TS, language = LANG } = {}) {
   const { file: up, tmpDir } = prepareForUpload(file);
   try {
-    // mmx 路径: 结果先落 os.tmpdir() 专属目录, 由本脚本读回再写受监路径 —— 外部 CLI 不碰用户路径
+    // mmx 路径: 输入按原路径只读传给 CLI; 输出落 os.tmpdir() 专属目录, 由本脚本读回再写受监路径 ——
+    // CLI 拿不到写回路径。子进程环境剥掉 MINIMAX_*: mmx 用自己的登录, Key 无论如何不流向它。
     if (USE_MMX) {
       const mmxTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'asr-mmx-'));
       try {
@@ -130,7 +135,10 @@ async function transcribe(file, { format = FORMAT, ts = TS, language = LANG } = 
         const args = ['speech', 'transcribe', '--file', up, '--model', 'asr-1.0', '--response-format', format, '--out', doc];
         if (ts) args.push('--timestamp-level', ts);
         if (language) args.push('--language', language);
-        const r = mmxRun(args, { timeout: 180000 });
+        const childEnv = { ...process.env };
+        delete childEnv.MINIMAX_API_KEY;
+        delete childEnv.MINIMAX_BASE_URL;
+        const r = mmxRun(args, { timeout: 180000, env: childEnv });
         if (r.error || r.status !== 0) {
           const t = String((r.stderr || '') + (r.stdout || '')).trim();
           throw new Error(`mmx speech transcribe 失败${r.error ? `(${r.error.code || r.error.message})` : `(exit ${r.status})`}: ${t.slice(0, 300)}\n  → 检查 mmx auth login / 网络; 老版本没有该子命令: npm i -g mmx-cli@latest(≥1.0.26)`);

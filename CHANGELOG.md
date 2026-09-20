@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.1 — 2026-09-20
+
+**Sixteenth review round (two-axis, over the 1.9.0 increment): one hard finding fixed plus four hardening/correction items**
+
+- **The plugin-root READMEs were missed by 1.9.0** (both review axes caught it): the 1.9.0 doc updates were applied to the skill-repo copies, but the copies inside `plugins/Wzdhehe/html2video-for-mcode/` — the tree this PR actually publishes — still described ASR as "Optional: `MINIMAX_API_KEY` … direct REST" and carried the old 244-test count. Both plugin-root READMEs are now byte-identical to the skill-repo versions (requirements/disclosure bullets + the 248-test count).
+- **Wording correction:** 1.9.0 claimed "the external CLI never touches user paths" — overstated. The input audio is passed to mmx read-only at its original path; only the **output** is staged through `os.tmpdir()` before landing in jailed paths. In-file comments now say exactly that.
+- **Windows cmd.exe quoting hardened:** args were quoted only on whitespace, so a legal path containing `&`/`|`/`<`/`>`/`(`/`)`/`^` would be re-interpreted by cmd as control characters. Any metacharacter now triggers quoting (documented residual: `%VAR%` inside quotes still expands; the worst case is mmx failing loudly on a mangled path). Regression-covered by running the shim test inside a project directory named `a&b c`.
+- **`MINIMAX_API_KEY` / `MINIMAX_BASE_URL` are stripped from the mmx child environment** — the key never reaches the external CLI even by inheritance; the shim test asserts `ENVKEY=absent`.
+- **The shim test now really asserts the full argv mapping**, including `--response-format verbose_json --timestamp-level word` (1.9.0's changelog listed `--timestamp-level`, which the test did not actually cover), and the duplicated two-test setup was extracted into one helper.
+- No test-count change: **248 tests / 14 files**.
+
 ## 1.9.0 — 2026-09-20
 
 **ASR toolchain simplification: `mmx speech transcribe` is now the default provider (mmx-cli ≥ 1.0.26, merged upstream in MiniMax-AI/cli#262)**
