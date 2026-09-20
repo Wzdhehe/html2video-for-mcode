@@ -63,9 +63,18 @@ if (PROVIDER && PROVIDER !== 'mmx' && PROVIDER !== 'api') {
 // (残留限制: cmd 在引号内仍展开 %VAR%; 文件名恰含同名环境变量时 mmx 会拿到错路径然后响亮失败 ——
 //  用户自己的机器自己的路径, 不是信任边界, 记录在案即可。)
 const IS_WIN = process.platform === 'win32';
-const mmxRun = (args, opts = {}) => IS_WIN
-  ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', ['mmx', ...args].map(a => /[\s"&|<>^()%]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a).join(' ')], { encoding: 'utf8', windowsHide: true, ...opts })
-  : spawnSync('mmx', args, { encoding: 'utf8', windowsHide: true, ...opts });
+// 单一来源: 所有 mmx 子进程(版本探测与 transcribe)统一从这里 spawn —— env 一律剥掉
+// MINIMAX_*(mmx 用自己的登录; Key 无论如何不流向它, 探测也不例外 —— 1.9.2 修正: 1.9.1 只在
+// transcribe 一处剥, 探测子进程仍继承, 声明过头), 引用规则也只有这一份。
+const mmxRun = (args, opts = {}) => {
+  const env = { ...process.env, ...(opts.env || {}) };
+  delete env.MINIMAX_API_KEY;
+  delete env.MINIMAX_BASE_URL;
+  const common = { encoding: 'utf8', windowsHide: true, ...opts, env };
+  return IS_WIN
+    ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', ['mmx', ...args].map(a => /[\s"&|<>^()%]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a).join(' ')], common)
+    : spawnSync('mmx', args, common);
+};
 // 探测不能靠 --help(未知子命令的 --help 也退 0), 认版本号: ≥1.0.26 才有 speech transcribe
 let mmxProbe;
 const mmxUsable = () => {
@@ -135,10 +144,7 @@ async function transcribe(file, { format = FORMAT, ts = TS, language = LANG } = 
         const args = ['speech', 'transcribe', '--file', up, '--model', 'asr-1.0', '--response-format', format, '--out', doc];
         if (ts) args.push('--timestamp-level', ts);
         if (language) args.push('--language', language);
-        const childEnv = { ...process.env };
-        delete childEnv.MINIMAX_API_KEY;
-        delete childEnv.MINIMAX_BASE_URL;
-        const r = mmxRun(args, { timeout: 180000, env: childEnv });
+        const r = mmxRun(args, { timeout: 180000 });
         if (r.error || r.status !== 0) {
           const t = String((r.stderr || '') + (r.stdout || '')).trim();
           throw new Error(`mmx speech transcribe 失败${r.error ? `(${r.error.code || r.error.message})` : `(exit ${r.status})`}: ${t.slice(0, 300)}\n  → 检查 mmx auth login / 网络; 老版本没有该子命令: npm i -g mmx-cli@latest(≥1.0.26)`);

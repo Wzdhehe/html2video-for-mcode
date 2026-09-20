@@ -113,6 +113,7 @@ describe('asr.mjs 提供方选择(mmx cli ≥1.0.26 缺省首选, REST 为显式
   };
   const runShimVersion = (bin) => {
     const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+    delete env.MINIMAX_API_KEY; // 与 mmxRun 同纪律: 测试自己的探测也别贡献 ENVKEY=present(否则机器导出过 Key 就假红)
     return process.platform === 'win32'
       ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'mmx', '--version'], { encoding: 'utf8', windowsHide: true, env })
       : spawnSync('mmx', ['--version'], { encoding: 'utf8', windowsHide: true, env });
@@ -146,7 +147,11 @@ describe('asr.mjs 提供方选择(mmx cli ≥1.0.26 缺省首选, REST 为显式
     for (const want of ['speech', 'transcribe', '--file', '--model', 'asr-1.0', '--response-format', 'verbose_json', '--timestamp-level', 'word', '--language', 'zh']) assert.ok(tr.includes(want), `参数缺 ${want}: ${JSON.stringify(tr)}`);
     const outIdx = tr.indexOf('--out');
     assert.ok(tr[outIdx + 1].includes('asr-mmx-'), '--out 必须落在专属临时目录');
-    assert.match(lines.find(l => l.startsWith('ENVKEY=')) || '', /ENVKEY=absent/, 'mmx 子进程不得看到 MINIMAX_API_KEY(mmx 用自己的登录)');
+    // 不能只看第一条 ENVKEY(那是 setup 探测写的, 空过): 整份日志里任何一次 mmx 子进程调用
+    // (--version 探测也算)都不许看到 Key —— 剥除回退到任何一处, 这里就红(1.9.2 修正断言空过)。
+    const envLines = lines.filter(l => l.startsWith('ENVKEY='));
+    assert.ok(envLines.length > 0 && envLines.every(l => l === 'ENVKEY=absent'),
+      `mmx 子进程(探测与 transcribe 全算)不得看到 MINIMAX_API_KEY: ${envLines.join(', ')}`);
     // 临时目录必须清理干净(与转码临时目录同一条纪律)
     assert.deepEqual(fs.readdirSync(os.tmpdir()).filter(f => f.startsWith('asr-mmx-') && !before.has(f)), [], 'os.tmpdir() 的 mmx 中转目录必须已清理');
   });

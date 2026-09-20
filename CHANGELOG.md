@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.2 — 2026-09-20
+
+**Seventeenth review round (two-axis, over the 1.9.1 increment): both axes caught the same two defects in 1.9.1's own fix — corrected here**
+
+- **The env scrub was at one call site, not the source.** 1.9.1 stripped `MINIMAX_API_KEY`/`MINIMAX_BASE_URL` only from the `speech transcribe` child; the `mmx --version` capability probe still inherited them, so 1.9.1's "the key never reaches the external CLI even by inheritance" was overstated. The scrub now lives inside `mmxRun` itself — the single spawn point — so every mmx child (probe included) gets it.
+- **The `ENVKEY=absent` assertion was vacuous.** It read the first `ENVKEY=` line in the shim log, which was written by the test's own setup probe (whose env never held the key) — it passed regardless of the transcribe child's env, and would have failed spuriously on machines with `MINIMAX_API_KEY` exported. The assertion now requires **every** `ENVKEY=` line in the log (probe and transcribe alike) to be `absent`; the test helper's own probe scrubs the same way for determinism. Red-proofed: removing the scrub from `mmxRun` turns this test red (verified locally before restoring).
+- **Disclosure correction:** the `a&b c` metacharacter-directory regression exercises the cmd.exe quoting path only on Windows, where the CLI is invoked through `cmd.exe /c`; on POSIX the child is spawned directly and the metacharacters are inert by construction (the Linux CI run therefore proves path handling there, not the quoting). 1.9.1's blanket "regression-covered" phrasing was Windows-only in effect.
+
 ## 1.9.1 — 2026-09-20
 
 **Sixteenth review round (two-axis, over the 1.9.0 increment): one hard finding fixed plus four hardening/correction items**
