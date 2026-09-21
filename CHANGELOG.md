@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.3 — 2026-09-21
+
+**Diff hygiene: text files normalized to LF (maintainer review gate on the PR head)**
+
+- Nine published files carried CRLF line endings — 1,854 lines in total — and under default whitespace rules (no `cr-at-eol`) `git diff --check` flags every CR-terminated line, so on the PR head that printed 3,708 lines of report. All nine are now LF, matching the rest of the repository (root README, every other plugin, the maintainer's own plugin). One of the nine was mixed (`tests/fetch-policy.test.mjs`, later edits were already LF); all are now consistently LF.
+- `.gitattributes` (`* text=auto eol=lf`) added at the plugin root, byte-identical in both published trees — the convention `plugins/antianqi/mcode-island` already uses — so CRLF cannot re-enter through a Windows checkout.
+- No functional change, verified: the conversion was byte-checked (refuses to write unless the old and new versions are byte-identical after normalizing line endings only), `tokens-template.mjs`'s generated CSS was already LF (JS template literals normalize CRLF to LF, so generated artifacts and `TOKENS_REV` are unchanged), and the full suite was re-run on all three trees afterwards.
+- Internal `docs/` files (never published) were normalized in the same pass.
+
 ## 1.9.2 — 2026-09-20
 
 **Seventeenth review round (two-axis, over the 1.9.1 increment): both axes caught the same two defects in 1.9.1's own fix — corrected here**
