@@ -1,13 +1,14 @@
-# html2video-for-mcode · Linux CI
+# html2video-for-mcode · CI (Linux + Windows)
 # 本仓库根就是技能目录(fork 上的 scoped smoke workflow 要等宿主维护者批准才会首跑),
-# 这里在自己的仓库里以同样的依赖组合(ubuntu + ffmpeg + chromium)把 tests/ 下全部测试
-# 真实执行 —— 尤其是三条需要**文件符号链接**能力的 canary: Windows 无开发者模式时建不了
-# 文件链接, 本地一直只能跳过, Linux 上是它们第一次真正运行。
+# 这里在自己的仓库里以同样的依赖组合(ffmpeg + Playwright Chromium, 两个平台各跑一遍)
+# 把 tests/ 下全部测试真实执行 —— 尤其是三条需要**文件符号链接**能力的 canary: Windows 无
+# 开发者模式时建不了文件链接, 本地一直只能跳过, Linux 与 Windows 管理员 runner 上是它们真正运行的场合。
 #
 # 依赖放置的坑(实测): 仓库根没有 package.json(技能目录不带 npm 清单), 而 npm 11 在
 # 无清单目录里 `npm install --no-save <pkg>` 会**静默不装**(exit 0, node_modules 为空)。
-# 所以先 `npm init -y` 造临时清单 → 装(不落 lockfile) → 删清单。playwright 落在仓库根
-# node_modules: scripts/ 与 tests/ 的 loadPackage 按模块自身位置向上解析即命中。
+# 所以先 `npm init -y` 造临时清单 → 装(不落 lockfile) → 删清单。
+# ffmpeg 走系统包(choco/apt)让它在 PATH 上: 测试会把脚本放进临时项目目录当 cwd 跑,
+# 只有 PATH 发现对"任意 cwd"都成立(node_modules 发现依赖 cwd/上两层锚点, 深层布局会够不到)。
 name: ci
 
 on:
@@ -20,7 +21,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  linux:
     name: all tests (ubuntu-latest · ffmpeg + chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -46,4 +47,34 @@ jobs:
       # glob 交给 shell 展开: 以后新增测试文件自动进 CI(旧枚举写法漏过 8 个文件)。
       # 单测超时 300s: 渲染冒烟里的 capture / build-video 在 CI 上要几十秒。
       - name: All tests (security · policy · css blocks · render smoke · symlink canaries)
+        run: node --test --test-timeout=300000 tests/*.test.mjs
+
+  windows:
+    name: all tests (windows-latest · ffmpeg + chromium)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # choco 的 ffmpeg 包含 ffmpeg.exe 与 ffprobe.exe, 落在 PATH 上 —— 与 Linux 作业同为系统包
+      - name: Install ffmpeg
+        shell: bash
+        run: choco install ffmpeg -y --no-progress
+
+      - name: Install playwright (throwaway manifest, nothing committed)
+        shell: bash
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save --no-package-lock playwright
+          rm package.json
+          npx playwright install chromium
+
+      - name: All tests (security · policy · css blocks · render smoke · symlink canaries)
+        shell: bash
         run: node --test --test-timeout=300000 tests/*.test.mjs
