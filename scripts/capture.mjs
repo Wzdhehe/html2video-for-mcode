@@ -260,6 +260,28 @@ for (const s of slides) {
     console.warn('   先跑 check-slides.mjs 定位; SVG 类资源建议 inline 进 HTML(依赖外部资源/XML 有误/缺 width-height 都会 broken)');
   }
 
+  // 布局几何自检(2026-09-22 实测踩坑): 内容总高超过可用区时, 普通 flex center 把溢出推到画布
+  // 上方之外裁掉(实测 kicker 被顶到 y≈17px、溢出 ≈125px, 而截图目检被当成"没渲染"放过)。
+  // 静态文本查不出"内容太高", 这里实测并点名数字; 骨架 .layout 的 safe center + 上下 padding
+  // (见 _template.html)让顶部永不被裁, 但溢出本身仍值得报。
+  const geo = await page.evaluate(() => {
+    const lay = document.querySelector('.layout') || document.querySelector('.stage');
+    if (!lay) return null;
+    const kids = [...lay.children].filter(el => {
+      const st = getComputedStyle(el);
+      return st.position !== 'absolute' && st.visibility !== 'hidden' && el.getBoundingClientRect().height > 0;
+    });
+    return {
+      scroll: lay.scrollHeight,
+      client: lay.clientHeight,
+      top: kids.length ? Math.min(...kids.map(el => el.getBoundingClientRect().top)) : null,
+    };
+  });
+  if (geo && (geo.scroll > geo.client + 2 || (geo.top != null && geo.top < 24))) {
+    const over = geo.scroll - geo.client;
+    console.warn(`⚠ ${s.id}: 布局几何 — 内容总高 ${geo.scroll}px${over > 2 ? ` > 可用 ${geo.client}px(溢出 ≈${over}px, 普通 flex center 会把它推到画布上方裁掉)` : ''}${geo.top != null && geo.top < 24 ? `; 顶部元素被推到 y≈${Math.round(geo.top)}px(贴顶/被裁)` : ''} — 减内容/降字号/缩绘图区; 骨架 .layout 是 safe center + 上下 padding(见 _template.html), 别退回普通 center、也别用 margin-top 推内容(会加进内容总高)`);
+  }
+
   // 帧目录是派生数据: 本次只要产出的是静态图(still 或 无动画), 旧 motion 帧一律作废,
   // 否则 build-video 会优先用残留帧, 把过时动画混进成片(切 no-fx 后重渲染时必踩)
   // safeOut: 输出侧也要防"项目内某段是符号链接"——rmSync(recursive) 会穿透符号链接删到项目外(二审 P1)

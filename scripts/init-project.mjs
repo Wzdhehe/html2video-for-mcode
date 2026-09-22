@@ -36,7 +36,7 @@ const TEMPLATE_HTML = `<!doctype html>
 <link rel="stylesheet" href="tokens.css">
 <style>
   .layout { position: absolute; inset: 0; display: flex; flex-direction: column;
-    justify-content: center; padding: 0 160px; gap: var(--sp-6); }
+    justify-content: safe center; padding: 120px 160px 190px; gap: var(--sp-6); }
   .layout h1 { font-family: var(--font-display); font-size: var(--fs-display);
     font-weight: 700; line-height: 1.18; max-width: 1400px; }
   .layout .sub { font-size: var(--fs-h3); color: var(--muted); max-width: 1200px; }

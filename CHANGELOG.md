@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.8 — 2026-09-22
+
+**Layout-overflow protection: safe-center scaffold + a capture-time geometry self-check** (field report: a dense table/data-viz slide had its kicker pushed to y≈17px — clipped at the canvas top — and the screenshot review passed it as fine)
+
+- Root-cause chain (field postmortem, numbers reproduced): content ≈925px inside an 800px content box (280px subtitle-band padding) with plain `justify-content: center` on the whole `.layout` — a centered flex line that overflows is pushed **above** the canvas and clipped there; the attempted `margin-top: 80px` patch made it worse (margins join the content height in flex centering).
+- **Template fix (root):** the scaffold `_template.html`'s `.layout` now ships `justify-content: safe center` + `padding: 120px 160px 190px` (top mirrors the brand bar, bottom is the subtitle safe area). Under `safe`, overflowing content falls back to top alignment — the kicker can never be clipped at the top edge again. `references/authoring.md` states the pitfall and the wrong "margin-top patch" explicitly.
+- **Check fix (rendered truth):** `capture.mjs` gained a layout-geometry self-check next to the broken-image check — it measures the layout's content extent vs its box and the topmost content element's y, and names the numbers ("内容总高 X > 可用 Y（溢出 ≈Z）… 顶部元素被推到 y≈N px"). Static text checks cannot see content height; this one measures, so the failure cannot pass another eyeball screenshot review as "just not rendered yet".
+- **Tests +2 (254 in fourteen files):** the geometry self-check warns (with the numbers) on the reproduced overflow shape and stays silent on healthy short content; the scaffold contract (`safe center` + the exact padding) is pinned. Each guard red-proofed individually — removing it reddens exactly its own case.
+
 ## 1.9.7 — 2026-09-22
 
 **Chart-structure gate: percentage-height bars must not sit bare in a flex column** (field report: an agent's bar chart came out with the bars collapsed/missing, and the screenshot review passed it as "just not rendered yet")

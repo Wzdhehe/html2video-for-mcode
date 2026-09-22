@@ -321,3 +321,50 @@ test('受管区升级真的改变渲染: 旧 CSS 出图 → 升级 → 画面按
   assert.ok(Math.abs(after - baseline) <= 0.05,
     `升级后必须回到技能当前版的画面(基准 ${baseline}, 升级后 ${after}) —— 这条把"改了 CSS 项目里真的生效"钉死在像素上`);
 });
+
+// 2026-09-22 实测踩坑(域外反馈): 内容总高溢出可用区时, 普通 flex center 把溢出推到画布上方裁掉
+// (kicker 被顶到 y≈17px、溢出 ≈125px), 截图目检却当成"没渲染"放过。capture 的几何自检要点名数字;
+// 骨架 .layout 的 safe center + 上下 padding 让顶部永不被裁 —— 两个都钉死在这里。
+test('capture 布局几何自检: 内容溢出/顶部被裁要点名(不是"没渲染")', async t => {
+  if (!FFMPEG) return t.skip('无 ffmpeg(主 CI 环境; 由 scoped smoke workflow 覆盖)');
+  const playwright = await loadPackage('playwright');
+  if (!playwright) return t.skip('无 playwright');
+  try { const b = await playwright.chromium.launch({ headless: true }); await b.close(); } catch {
+    return t.skip('chromium 未安装(npx playwright install chromium)');
+  }
+  const proj = tmpdir();
+  assert.equal(runSkill('init-project.mjs', [proj, '--topic', 'GeoOverflow']).status, 0);
+  const g = spawnSync(FFMPEG, ['-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=32000:cl=mono', '-t', '3',
+    '-c:a', 'libmp3lame', '-b:a', '64k', '-y', path.join(proj, 'audio', '01.mp3')], { windowsHide: true });
+  assert.equal(g.status, 0, g.stderr ?? '');
+  const sp = path.join(proj, 'script.json');
+  const s = JSON.parse(fs.readFileSync(sp, 'utf8'));
+  s.slides = [{ id: '01', html: '01-title.html', audio: '01.mp3', clauses: [{ stage: 1, text: '一句。' }] }];
+  fs.writeFileSync(sp, JSON.stringify(s, null, 2));
+  const slide = path.join(proj, 'slides', '01-title.html');
+  // 坑形态(复刻实测现场): 整块普通 center + 字幕带 padding-bottom:280px + 950px 高内容块
+  fs.writeFileSync(slide, `<!doctype html><html data-theme="a"><head><meta charset="utf-8"><link rel="stylesheet" href="tokens.css">
+<style>.layout { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; padding:0 160px 280px; gap:32px }
+.kicker{font-size:20px}.tall{height:950px;background:var(--panel-2)}</style></head>
+<body><div class="stage"><main class="layout"><div class="kicker">小标题</div><h1>标题两行标题两行</h1><div class="tall"></div></main></div></body></html>`);
+  assert.equal(runSkill('plan-timings.mjs', [proj]).status, 0);
+  const bad = runSkill('capture.mjs', [proj, '--mode', 'still']);
+  assert.equal(bad.status, 0, bad.stdout + bad.stderr);
+  assert.match(bad.stdout + bad.stderr, /布局几何/, '溢出必须被点名: ' + (bad.stdout + bad.stderr).slice(-400));
+  assert.match(bad.stdout + bad.stderr, /溢出|贴顶/, '要给出数字方向的定位');
+  // 矮内容不许误报(03-kpi-grid 那种健康页)
+  fs.writeFileSync(slide, `<!doctype html><html data-theme="a"><head><meta charset="utf-8"><link rel="stylesheet" href="tokens.css">
+<style>.layout { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; padding:0 160px 280px; gap:32px }</style></head>
+<body><div class="stage"><main class="layout"><h1>短标题</h1><p>一点内容</p></main></div></body></html>`);
+  const ok = runSkill('capture.mjs', [proj, '--mode', 'still']);
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.ok(!/布局几何/.test(ok.stdout + ok.stderr), '矮内容不该报: ' + (ok.stdout + ok.stderr).slice(-300));
+});
+
+test('骨架 .layout 必须是 safe center + 上下 padding(溢出退回顶部对齐, 顶部永不被裁)', () => {
+  const proj = tmpdir();
+  assert.equal(runSkill('init-project.mjs', [proj, '--topic', 'TplContract']).status, 0);
+  const tpl = fs.readFileSync(path.join(proj, 'slides', '_template.html'), 'utf8');
+  assert.match(tpl, /justify-content:\s*safe center/, '普通 center 溢出时会把内容推上画布裁掉(实测 kicker y≈17px)');
+  assert.match(tpl, /padding:\s*120px\s+160px\s+190px/, '上 padding 给品牌栏、下 padding 给字幕带');
+});
