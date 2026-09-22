@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { flagValue, loadPackage, positionalDir, requireFreshCss, safeId, safeOut, safeRel, validateScriptPaths, validateTimingsIds } from './tools.mjs';
+import { flagValue, loadPackage, positionalDir, requireFreshCss, safeId, safeOut, safeRel, subtitleKeyframes, subtitleWindows, validateScriptPaths, validateTimingsIds } from './tools.mjs';
 
 const argv = process.argv.slice(2);
 const dir = positionalDir(argv);
@@ -136,19 +136,19 @@ async function captureSubStills(page, { sid, t, framesCover }) {
     const end = t.clauses[k + 1]?.start ?? t.duration;
     const from = Math.max(start, framesCover);
     if (end - from <= 0.02) continue;                 // 这段已被帧序列覆盖(逐帧 seek 时字幕本身就是对的)
-    const at = ((from + end) / 2) * 1000;             // 取该段中点, 避开淡入淡出
-    await page.evaluate(({ k, at }) => {
+    await page.evaluate(({ k }) => {
       const subs = document.querySelectorAll('.kit-sub');
-      document.getAnimations().forEach(a => {
-        const el = a.effect?.target;
-        try {
-          if (el?.closest?.('.kit-sub')) a.currentTime = 0;   // 字幕先全藏(0% 关键帧 opacity:0)
-          else a.finish();                                    // 基底一律终态
-        } catch { /* 无限氛围动画 finish 会抛, 忽略 */ }
+      // 逐帧截图共用同一页: 每一轮都必须把**全部**字幕重新钉一遍 —— 目标钉满亮、其余钉隐藏。
+      // 不能只钉目标: 钉 = 停动画 + 写内联样式, 上一轮被钉过的元素已无动画可拨回 0,
+      // 内联样式会漏进后续静帧(2026-09-22 实测: 下一张静帧里叠出上一句的深色底板补丁)。
+      subs.forEach((el, j) => {
+        el.style.animation = 'none';
+        el.style.opacity = j === k ? '1' : '0';
       });
-      const target = subs && subs[k];
-      if (target) for (const a of target.getAnimations()) { try { a.currentTime = at; } catch { /* ignore */ } }
-    }, { k, at });
+      document.getAnimations().forEach(a => {
+        try { a.finish(); } catch { /* 无限氛围动画 finish 会抛, 忽略 */ }   // 基底一律终态
+      });
+    }, { k });
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     const out = safeOut(dir, 'build', 'substills', sid, `s${k}.png`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -195,25 +195,7 @@ for (const s of slides) {
   // 显示窗 = 该句开口 → 下句开口。做成百分比关键帧动画: 逐帧 seek 天然工作, still 模式 finish() 后自动隐藏。
   // 必须在 goto 之前 addInitScript 才会生效。
   if (SUBS && Array.isArray(t.clauses) && t.clauses.length) {
-    await page.addInitScript(({ clauses, duration }) => {
-      const durMs = duration * 1000;
-      const pct = x => Math.max(0, Math.min(100, (x / durMs) * 100));
-      const css = clauses.map((c, i) => {
-        const isLast = i === clauses.length - 1;
-        const a = pct(c.start * 1000);
-        const b = Math.max(pct((clauses[i + 1]?.start ?? duration) * 1000), a + 0.5);
-        // 淡入/淡出都必须在 [a, b] 窗口内完成 —— 淡出若越界(b + fade), 会和下一条字幕同时可见,
-        // 表现为"重影/叠字"(两条文字不同却叠在一起, 极易被误判成重复元素或字体 bug)。
-        // 最后一条不淡出, 一直显示到片尾。
-        const win = b - a;
-        const fin = Math.min(Math.max(0.15, win * 0.06), 0.8);
-        const fout = isLast ? 0 : Math.min(Math.max(0.15, win * 0.06), 0.8);
-        const p1 = Math.min(a + fin, b);          // 淡入完成
-        const p2 = Math.max(p1, b - fout);        // 淡出开始
-        return `@keyframes kit-sub-${i}{0%,${a.toFixed(3)}%{opacity:0}` +
-          `${p1.toFixed(3)}%,${p2.toFixed(3)}%{opacity:1}` +
-          `${b.toFixed(3)}%,100%{opacity:0}}`;
-      }).join('');
+    await page.addInitScript(({ clauses, durMs, css }) => {
       const mount = () => {
         const st = document.createElement('style');
         st.textContent = '.kit-sub{position:absolute;left:50%;bottom:calc(var(--stage-h, 1080px) * 0.077778);transform:translateX(-50%);'
@@ -247,23 +229,19 @@ for (const s of slides) {
       };
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
       else mount();
-    }, { clauses: t.clauses, duration: t.duration });
+    }, { clauses: t.clauses, durMs: t.duration * 1000, css: subtitleKeyframes(t.clauses, t.duration) });
 
-    // 字幕窗口自检(纯算术, 与页面里生成的 keyframes 同源): 任意时刻最多一条字幕可见。
-    // 越界淡出曾导致两条字幕重叠(视觉上像重影/错字), 这里把它变成显式告警。
-    const pctOf = x => Math.max(0, Math.min(100, (x / t.duration) * 100));
-    for (let i = 0; i < t.clauses.length; i++) {
-      const isLast = i === t.clauses.length - 1;
-      const a = pctOf(t.clauses[i].start);
-      const b = Math.max(pctOf(t.clauses[i + 1]?.start ?? t.duration), a + 0.5);
+    // 字幕窗口自检(与页面关键帧同一来源 tools.subtitleWindows): 任意时刻最多一条字幕可见。
+    // 淡入/淡出都收在各自窗口内 —— 真正的重叠只有一种: 上一句窗口过短被 a+0.5 顶出(prevB > a)。
+    // (2026-09-22 修: 旧判据拿"已是淡出终点"的 prevB 再叠一次淡出长度, 双重计数 → 恒真误报。)
+    const wins = subtitleWindows(t.clauses, t.duration);
+    for (let i = 0; i < wins.length; i++) {
+      const { a, b, isLast } = wins[i];
       if (!isLast && b - a < 0.6) console.warn(`⚠ ${s.id}: 第 ${i + 1} 句字幕窗口仅 ${(t.duration * (b - a) / 100).toFixed(2)}s, 可能会一闪而过`);
       if (i > 0) {
-        const prevA = pctOf(t.clauses[i - 1].start);
-        const prevB = Math.max(a, prevA + 0.5);
-        const prevWin = prevB - prevA;
-        const prevOut = Math.min(Math.max(0.15, prevWin * 0.06), 0.8); // 淡出仍在窗口内 → 不越界
-        if (prevB + prevOut > a + 0.001) {
-          console.warn(`⚠ ${s.id}: 第 ${i} 句与第 ${i + 1} 句字幕会同时可见(重叠 ${(t.duration * (prevB + prevOut - a) / 100).toFixed(2)}s)`);
+        const prevB = wins[i - 1].b;
+        if (prevB > a + 0.001) {
+          console.warn(`⚠ ${s.id}: 第 ${i} 句与第 ${i + 1} 句字幕会同时可见(重叠 ${(t.duration * (prevB - a) / 100).toFixed(2)}s)`);
         }
       }
     }

@@ -119,7 +119,7 @@ test('字幕时间轴: 动画窗之后的字幕变化必须进画面(二审 P1: 
   const scriptPath = path.join(proj, 'script.json');
   const script = JSON.parse(fs.readFileSync(scriptPath, 'utf8'));
   script.slides = script.slides.filter(s => s.id === '01');
-  script.slides[0].clauses = [{ stage: 1, text: 'AAAAAAAAAAAAAAAA' }, { stage: 1, text: 'BBBBBBBBBBBBBBBB' }];
+  script.slides[0].clauses = [{ stage: 1, text: 'AAAAAAAAAAAAAAAA' }, { stage: 1, text: 'BBBB' }];
   fs.writeFileSync(scriptPath, JSON.stringify(script, null, 2));
   // 动画 1s 内结束, 第二句开口在 3.5s —— 正落在动画窗之外(修复前这里被 tpad 冻帧吞掉)
   fs.writeFileSync(path.join(proj, 'slides', '01-title.html'),
@@ -130,7 +130,7 @@ test('字幕时间轴: 动画窗之后的字幕变化必须进画面(二审 P1: 
   const timings = JSON.parse(fs.readFileSync(tj, 'utf8'));
   timings.slides[0].clauses = [
     { stage: 1, start: 0.3, text: 'AAAAAAAAAAAAAAAA' },
-    { stage: 1, start: 3.5, text: 'BBBBBBBBBBBBBBBB' },
+    { stage: 1, start: 3.5, text: 'BBBB' },
   ];
   fs.writeFileSync(tj, JSON.stringify(timings, null, 2));
 
@@ -166,6 +166,9 @@ test('字幕时间轴: 动画窗之后的字幕变化必须进画面(二审 P1: 
   const dOwn = diff(fLate, sOwn), dOther = diff(fLate, sOther);
   assert.ok(dOwn != null && dOther != null, '应能算出字幕带差异');
   assert.ok(dOwn < 2.0, `5.0s 的画面应贴合第 2 句字幕图, 实际差异 ${dOwn}`);
+  // 2026-09-22 重标定: 第 2 句文本改为**不同长度**。原来两句等长(A/B 各 16 字), 修复灰字幕 bug 后
+  // 两张字幕图都满亮, 纯字形差只剩 ~3.7 —— 旧阈值 4.0 其实是靠"末句静帧截在淡变上"的灰度差撑过的;
+  // 长度不同 → 底板宽度也不同, 判据与字形渲染/平台字体解耦(冻帧时该差异 ≈ 0, 依旧必红)。
   assert.ok(dOther > 4.0, `5.0s 的画面不该还是第 1 句(冻帧), 与第 1 句字幕图的差异只有 ${dOther}`);
 });
 
@@ -184,7 +187,7 @@ test('字幕时间轴(静态/no-fx 路径): 没有帧序列时也要逐句烧字
   const scriptPath = path.join(proj, 'script.json');
   const script = JSON.parse(fs.readFileSync(scriptPath, 'utf8'));
   script.slides = script.slides.filter(s => s.id === '01');
-  script.slides[0].clauses = [{ stage: 1, text: 'AAAAAAAAAAAAAAAA' }, { stage: 1, text: 'BBBBBBBBBBBBBBBB' }];
+  script.slides[0].clauses = [{ stage: 1, text: 'AAAAAAAAAAAAAAAA' }, { stage: 1, text: 'BBBB' }];
   fs.writeFileSync(scriptPath, JSON.stringify(script, null, 2));
   // no-fx: 整张没有入场动画 → capture 走静态路径(修复前只截一帧 → 整片没有字幕)
   fs.writeFileSync(path.join(proj, 'slides', '01-title.html'),
@@ -195,7 +198,7 @@ test('字幕时间轴(静态/no-fx 路径): 没有帧序列时也要逐句烧字
   const timings = JSON.parse(fs.readFileSync(tj, 'utf8'));
   timings.slides[0].clauses = [
     { stage: 1, start: 0.3, text: 'AAAAAAAAAAAAAAAA' },
-    { stage: 1, start: 3.5, text: 'BBBBBBBBBBBBBBBB' },
+    { stage: 1, start: 3.5, text: 'BBBB' },
   ];
   fs.writeFileSync(tj, JSON.stringify(timings, null, 2));
 
@@ -223,6 +226,7 @@ test('字幕时间轴(静态/no-fx 路径): 没有帧序列时也要逐句烧字
   const dOwn = diff(grab(5.0, path.join(bd, 't50.png')), still(1, path.join(bd, 'own.png')));
   const dOther = diff(grab(5.0, path.join(bd, 't50b.png')), still(0, path.join(bd, 'other.png')));
   assert.ok(dOwn != null && dOwn < 2.0, `关动效时 5.0s 应显示第 2 句字幕, 与第 2 句字幕图差异 ${dOwn}(修复前无字幕)`);
+  // 2026-09-22 重标定: 第 2 句改不同长度(几何差), 旧等长 A/B 串的阈值靠灰字幕 bug 的灰度差撑过 —— 同上
   assert.ok(dOther != null && dOther > 4.0, `不该显示第 1 句, 差异 ${dOther}`);
 });
 

@@ -219,6 +219,36 @@ export function probeSize(ffprobe, file) {
   return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : null;
 }
 
+// ── 字幕关键帧(单一来源) ─────────────────────────────────────────────
+// capture 的页面注入(生成 CSS)与窗口自检(算重叠)都从这里取数, 防两处算式漂移。
+// 偏移是"占整张时长的百分比"(0–100)。b 夹在 [a+0.5, 100]: 下一句开口太近时窗口至少留 0.5%,
+// 最后一句起点太晚时不得越过 100%(CSS 关键帧选择器只认 [0%,100%], 越界整条被丢弃)。
+export function subtitleWindows(clauses, duration) {
+  const pct = x => Math.max(0, Math.min(100, (x / duration) * 100));
+  return clauses.map((c, i) => {
+    const a = pct(c.start);
+    const b = Math.min(100, Math.max(pct(clauses[i + 1]?.start ?? duration), a + 0.5));
+    return { a, b, isLast: i === clauses.length - 1 };
+  });
+}
+
+// 每句一对关键帧: 0%→a 藏, a→p1 淡入, [p1,p2] 满亮, (非末句) p2→b 淡出后藏到片尾。
+// 末句**不生成淡出尾帧** —— b=100 时尾帧会产出 "100%,100%{opacity:0}", 与平台端点同偏移
+// 撞车(同一偏移声明两次时后者生效), 平台被吃掉, 整句退化成缓慢淡出
+// (2026-09-22 实测: 拼接静帧不透明度 0.44, 成片"字幕出现即变灰")。
+export function subtitleKeyframes(clauses, duration) {
+  return subtitleWindows(clauses, duration).map(({ a, b, isLast }, i) => {
+    const win = b - a;
+    const fin = Math.min(Math.max(0.15, win * 0.06), 0.8);
+    const fout = isLast ? 0 : Math.min(Math.max(0.15, win * 0.06), 0.8);
+    const p1 = Math.min(a + fin, b);
+    const p2 = Math.max(p1, b - fout);
+    const tail = isLast ? '' : `${b.toFixed(3)}%,100%{opacity:0}`;
+    return `@keyframes kit-sub-${i}{0%,${a.toFixed(3)}%{opacity:0}` +
+      `${p1.toFixed(3)}%,${p2.toFixed(3)}%{opacity:1}` + tail + `}`;
+  }).join('');
+}
+
 // ── 路径规范化(比较用) ─────────────────────────────────────────────────
 // 取最深已存在祖先的 realpath 再拼回来: macOS 上 /var/... 与 /private/var/... 是同一目录的两种
 // 写法, 纯字符串比较会把"项目内的合法路径"误判成越界(二审 P2 在官方 CI 的 macOS 上实测踩到)。

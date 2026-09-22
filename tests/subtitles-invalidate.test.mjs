@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { findTool, loadPackage } from '../scripts/tools.mjs';
+import { findTool, loadPackage, subtitleKeyframes, subtitleWindows } from '../scripts/tools.mjs';
 import { runSkill, tmpdir, FRESH_TOKENS } from './helpers.mjs';
 
 const FFMPEG = findTool('ffmpeg');
@@ -50,6 +50,17 @@ test('字幕静帧随字幕作废: 删掉一句 / --no-subs 重建后, 成片不
     return m ? parseFloat(m[1]) : null;
   };
   const crop = (src, out) => { spawnSync(FFMPEG, ['-y', '-hide_banner', '-loglevel', 'error', '-i', src, '-vf', box, out], { windowsHide: true }); return out; };
+  // 字幕带亮度统计: YMAX=文字峰值(满亮 235 档, 截在淡变上掉到 ~130), YMIN=底板地板(叠框会下陷)
+  const STATS = img => {
+    const o = spawnSync(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-i', img,
+      '-lavfi', `[0:v]${box},signalstats,metadata=print:file=-`, '-frames:v', '1', '-f', 'null', '-'],
+      { encoding: 'utf8', windowsHide: true });
+    const txt = (o.stdout || '') + (o.stderr || '');
+    const g = k => { const m = new RegExp(k + '=([0-9.]+)').exec(txt); return m ? parseFloat(m[1]) : null; };
+    return { YMIN: g('YMIN'), YAVG: g('YAVG'), YMAX: g('YMAX') };
+  };
+  const YMAX = img => STATS(img).YMAX;
+  const YFLOOR = img => STATS(img).YMIN;
   const grab = (t0, out) => { spawnSync(FFMPEG, ['-y', '-hide_banner', '-loglevel', 'error', '-ss', String(t0), '-i', path.join(proj, 'out', 'final.mp4'), '-frames:v', '1', '-vf', box, out], { windowsHide: true }); return out; };
   const dur = () => parseFloat((spawnSync(FFPROBE, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(proj, 'out', 'final.mp4')], { encoding: 'utf8' }).stdout || '').trim());
   const work = path.join(proj, 'build', 'subcheck');
@@ -61,6 +72,18 @@ test('字幕静帧随字幕作废: 删掉一句 / --no-subs 重建后, 成片不
   assert.equal(runSkill('capture.mjs', [proj, '--mode', 'still']).status, 0);
   assert.ok(fs.existsSync(subFile(1)), '前置: 第 2 句的静帧应已生成');
   assert.equal(man().stills.length, 2, '前置: 清单里应有 2 句');
+  // 拼接静帧必须满亮(2026-09-22 灰字幕回归): 静帧曾截在关键帧淡变的半山腰上,
+  // 与帧序列段拼出"字幕出现不到一秒就跳灰"。标定: 满亮峰值实测 235(细笔画 AA 余量), 灰 bug 实测 138。
+  for (const k of [0, 1]) {
+    const y = YMAX(subFile(k));
+    console.log(`    实测(第 ${k + 1} 句静帧字幕带 YMAX, 满亮=235 档): ${y}`);
+    assert.ok(y != null && y >= 200, `第 ${k + 1} 句的拼接静帧必须满不透明(字幕带峰值 ${y})`);
+  }
+  // 跨句残留防漏(2026-09-22): 逐帧截图共用一页, 钉过的字幕若漏进后续静帧, 会叠出深色底板补丁 ——
+  // 两张静帧的暗部地板必须一致(相对判据, 不依赖主题底色)
+  const floor = [YFLOOR(subFile(0)), YFLOOR(subFile(1))];
+  console.log(`    实测(两句静帧字幕带暗部地板, 应一致): ${floor.join(' / ')}`);
+  assert.ok(Math.abs(floor[0] - floor[1]) <= 12, `上一句字幕不得漏进下一张静帧(暗部地板 ${floor.join(' / ')})`);
   const oldS1 = path.join(work, 'old-s1.png');
   fs.copyFileSync(subFile(1), oldS1);
 
@@ -156,4 +179,41 @@ test('清单帧覆盖与当前帧序列不一致 → 忽略清单(像素级: 陈
   const dOk = diff(grab(2.55, path.join(proj, 'build', 'cov-ok.png')), path.join(stills, '01', 's0.png'));
   console.log(`    实测(清单对齐后, 末段与红色静帧的差异): ${dOk}`);
   assert.ok(dOk != null && dOk < 2.5, `对齐清单的静帧应当拼入画面(与红色静帧差异 ${dOk})`);
+});
+
+// 2026-09-22 灰字幕回归(工具层, 无工具门槛): 末句关键帧曾把 100% 声明两遍(尾帧与平台端点
+// 同偏移, 同偏移多次声明后者生效) → 平台被吃成缓慢淡出, 静帧截在半山腰(实测 0.44)。
+// 判据四条: 无同偏移撞车 / 末句无淡出尾帧 / 非末句保留尾帧 / 偏移不越 [0,100] 且单调。
+test('字幕关键帧形状: 末句无尾帧、无同偏移撞车、偏移不越界(工具层)', () => {
+  const parse = css => (css.match(/@keyframes kit-sub-\d+\{(?:[^{}]|\{[^{}]*\})*\}/g) ?? []).map(blk => {
+    const groups = blk.match(/[\d.,%]+\{opacity:[\d.]+\}/g) ?? [];
+    const offsets = [];
+    for (const g of groups) {
+      const sel = g.split('{')[0];
+      // 同一选择器列表里的重复偏移是同一声明的别名(如 100.000%,100%), 不算撞车
+      offsets.push(...new Set(sel.split(',').map(parseFloat)));
+    }
+    return { blk, offsets };
+  });
+
+  // 单句(即末句): 修复前会产出 "...,100.000%{opacity:1}100.000%,100%{opacity:0}}" 的撞车尾帧
+  const one = subtitleKeyframes([{ start: 0.1, text: 'x' }], 3);
+  assert.doesNotMatch(one, /100\.000%,100%|100%,100\.000%/, `末句不得生成淡出尾帧: ${one}`);
+  assert.match(one, /\{opacity:1\}\}$/, `末句平台应保持到片尾: ${one}`);
+
+  // 两句: 末句无尾帧, 首句(非末句)必须保留尾帧(防修过头把切换淡出也删了)
+  const two = subtitleKeyframes([{ start: 0 }, { start: 1.2, text: 'x' }], 3);
+  assert.equal((two.match(/%,100%\{opacity:0\}/g) ?? []).length, 1, `应只有非末句一条尾帧: ${two}`);
+
+  // 形状不变量: 每对关键帧内偏移不越 [0,100] 且单调不减, 跨块不撞偏移
+  for (const list of [one, two, subtitleKeyframes([{ start: 0 }, { start: 2.994 }], 3)]) {
+    for (const { blk, offsets } of parse(list)) {
+      assert.ok(offsets.length > 0, `应能解析出偏移: ${blk}`);
+      assert.ok(offsets.every(o => o >= 0 && o <= 100), `偏移越界(CSS 关键帧选择器只认 0–100%): ${blk}`);
+      for (let i = 1; i < offsets.length; i++) assert.ok(offsets[i] >= offsets[i - 1], `偏移乱序: ${blk}`);
+      assert.equal(new Set(offsets).size, offsets.length, `同偏移声明两次(后者会吃掉前者): ${blk}`);
+    }
+  }
+  // b 夹紧: 末句起点晚于 99.5% 时窗口终点不得越过 100
+  assert.equal(subtitleWindows([{ start: 0 }, { start: 2.994 }], 3)[1].b, 100);
 });
