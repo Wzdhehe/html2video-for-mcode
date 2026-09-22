@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.7 — 2026-09-22
+
+**Chart-structure gate: percentage-height bars must not sit bare in a flex column** (field report: an agent's bar chart came out with the bars collapsed/missing, and the screenshot review passed it as "just not rendered yet")
+
+- The authoring docs already carried the warning (`references/authoring.md` chart disciplines: bars in a flex column with percentage heights get squeezed by `flex-shrink` — measured: 84% and 72% drawn at the same height; fix = wrap in `.chart-plot-cell`, the grid `1fr` plot row), and the symptoms table has the entry. The agent read the content-volume and entrance sections but not the chart-toolkit section — and `check-slides.mjs` had no structural check to catch the mistake, so a silent visual failure sailed to `build-video`.
+- New `check-slides` finding (hint-level, does not block): bar-semantic element with a `< 100%` inline height **in a slide that contains a `flex-direction: column` and no `.chart-plot-cell`** → "these bars may collapse; use `.chart-col > .chart-plot-cell.grid > .chart-bar-wrap{height:N%}`". Three conjuncts on purpose — percentage heights outside flex columns are legitimate and must not warn (covered by a false-positive regression case).
+- **Tests +3 (252 in fourteen files):** pitfall shape warns (and stays hint-level), the documented recipe shape stays silent, the no-flex-column case stays silent. Red-proofed: disabling the check turns the pitfall case red.
+
 ## 1.9.6 — 2026-09-22
 
 **mcode-first tool choice made explicit** (field report: an agent running inside the mcode sandbox reached for mmx-cli and forgot the mcode tools were available)

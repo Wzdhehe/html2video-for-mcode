@@ -221,6 +221,23 @@ for (const s of slides) {
     report.push({ id: s.id, level: 'warn', msg: `绝对定位元素的 bottom:${inBand[0]}px 等 ${inBand.length} 处落在字幕带(底部 0–${bandTop}px @${script.height ?? 1080}) — 成片字幕会压住它, still 预览看不出; 图注/落款挪到 bottom ≥ ${bandTop}px 或放回流内(padding-bottom 会兜住), 验收用 grab-frames.mjs 抽成片实帧` });
     warns++;
   }
+
+  // 5f. 柱状图结构(2026-09-22 域外 agent 实测踩坑): 百分比柱体(值基准高度)直接放 flex column 会被
+  //     flex-shrink 压扁 —— 实测 84%/72% 画成同高, 而截图阶段"柱子没出来"极易被当成"还没渲染"放过。
+  //     规范形态: .chart-col 的 grid 1fr 行(.chart-plot-cell)包住柱体(authoring.md 图表节)。
+  //     提示级; 三合取判据(柱状语义类 + <100% 高度 + 张内有 flex-direction:column 且全张无
+  //     chart-plot-cell) —— 非 flex column 的百分比高度是合法用法, 不该误报。
+  const barTags = [...html.matchAll(/<[a-z][a-z0-9]*\b[^>]*>/gi)].map(m2 => m2[0]).filter(t => {
+    const cls = /class\s*=\s*"([^"]*)"/i.exec(t)?.[1] ?? '';
+    const sty = /style\s*=\s*"([^"]*)"/i.exec(t)?.[1] ?? '';
+    const h = /\bheight\s*:\s*([\d.]+)\s*%/i.exec(sty);
+    return h && parseFloat(h[1]) < 100 && /(bar|pillar|plot|gauge|stack)/i.test(cls);
+  });
+  if (barTags.length && !/chart-plot-cell/.test(html) && /flex-direction\s*:\s*column/i.test(html)) {
+    const sample = (/class\s*=\s*"([^"]*)"/i.exec(barTags[0])?.[1] ?? '').split(/\s+/)[0];
+    report.push({ id: s.id, level: 'warn', msg: `百分比柱体 ${barTags.length} 处(如 .${sample})没包 .chart-plot-cell — 柱体直接放 flex column 会被 flex-shrink 压扁(实测 84%/72% 画成同高, "柱子没出来/高度对不上"多半是它): 按 authoring.md 图表节用 .chart-col > .chart-plot-cell.grid > .chart-bar-wrap{height:N%} 结构; 若这些百分比高度不在 flex column 里可忽略本条` });
+    warns++;
+  }
 }
 
 // 6. tokens.css 受管块落后——rev 与技能当前不一致 / 缺失 / 重复 / 坏定界 / 区外残留副本

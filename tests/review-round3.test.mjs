@@ -289,6 +289,38 @@ describe('D5 · 字幕带闸门只对"绝对定位的 bottom"报警', () => {
   });
 });
 
+describe('柱状图结构闸门: 百分比柱体不得裸放 flex column(2026-09-22 域外实测踩坑)', () => {
+  const mk = html => {
+    const p = mkproj(tmpdir(), { slides: [{ id: '01', html: '01.html', audio: '01.mp3' }] });
+    fs.writeFileSync(path.join(p, 'slides', '01.html'), html);
+    return p;
+  };
+  test('坑形态: flex column + 百分比柱体 + 无 .chart-plot-cell → 提示(不阻塞)', () => {
+    const r = runSkill('check-slides.mjs', [mk(`<!doctype html><html data-theme="a"><head><meta charset="utf-8">
+<style>.pillar { background: var(--accent); }</style></head>
+<body><div class="stage"><div style="display:flex;flex-direction:column;height:300px">
+<div class="pillar" style="height:77.5%"></div><div class="pillar" style="height:60%"></div>
+</div></div></body></html>`)]);
+    assert.match(r.stdout + r.stderr, /没包 \.chart-plot-cell/, r.stdout + r.stderr);
+    assert.equal(r.status, 0, '提示级不阻塞流水线: ' + r.stdout + r.stderr);
+  });
+  test('规范形态: .chart-plot-cell.grid 包柱体 → 不报', () => {
+    const r = runSkill('check-slides.mjs', [mk(`<!doctype html><html data-theme="a"><head><meta charset="utf-8">
+<style>.chart-bar-wrap { background: var(--accent); }</style></head>
+<body><div class="stage"><div class="chart-col" style="height:300px"><div class="chart-plot-cell grid">
+<div class="chart-bar-wrap" style="height:77.5%"></div></div></div></div></body></html>`)]);
+    assert.ok(!/没包 \.chart-plot-cell/.test(r.stdout), r.stdout.slice(-300));
+  });
+  test('误报防线: 柱状语义类 + 百分比高度但张内没有 flex column → 不报', () => {
+    const r = runSkill('check-slides.mjs', [mk(`<!doctype html><html data-theme="a"><head><meta charset="utf-8">
+<style>.pillar { background: var(--accent); }</style></head>
+<body><div class="stage"><div style="display:grid;height:300px">
+<div class="pillar" style="height:77.5%"></div><div class="pillar" style="height:60%"></div>
+</div></div></body></html>`)]);
+    assert.ok(!/没包 \.chart-plot-cell/.test(r.stdout), '非 flex column 是合法用法: ' + r.stdout.slice(-300));
+  });
+});
+
 describe('D6 · transition 单一解析(闸门与渲染器结论一致)', () => {
   test('readTransition 接受裸字符串与对象, 结论相同', () => {
     assert.deepEqual(readTransition('xfade'), { type: 'xfade', dur: 0.4, label: '交叉溶解 xfade 0.4s' });
