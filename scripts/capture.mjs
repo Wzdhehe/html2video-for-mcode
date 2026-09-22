@@ -101,12 +101,11 @@ fs.mkdirSync(safeOut(dir, 'preview'), { recursive: true });
 async function captureCover(page, { sid, firstId }) {
   if (sid !== firstId) return false;
   await page.evaluate(() => {
+    // 封面必须无字幕(平台自己会叠字): 显式写内联隐藏, 不依赖动画 —— captureSubStills 的
+    // 钉死会把字幕动画整个撤掉, 靠 currentTime=0 藏字幕对已钉元素无效(2026-09-22 实测封面烙图)
+    document.querySelectorAll('.kit-sub').forEach(el => { el.style.animation = 'none'; el.style.opacity = '0'; });
     document.getAnimations().forEach(a => {
-      const el = a.effect?.target;
-      try {
-        if (el?.closest?.('.kit-sub')) a.currentTime = 0;   // 字幕不进封面(平台自己会叠字)
-        else a.finish();                                     // 基底走终态
-      } catch { /* 无限氛围动画 finish 会抛, 忽略 */ }
+      try { a.finish(); } catch { /* 无限氛围动画 finish 会抛, 忽略 */ }   // 基底走终态
     });
   });
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
@@ -138,9 +137,9 @@ async function captureSubStills(page, { sid, t, framesCover }) {
     if (end - from <= 0.02) continue;                 // 这段已被帧序列覆盖(逐帧 seek 时字幕本身就是对的)
     await page.evaluate(({ k }) => {
       const subs = document.querySelectorAll('.kit-sub');
-      // 逐帧截图共用同一页: 每一轮都必须把**全部**字幕重新钉一遍 —— 目标钉满亮、其余钉隐藏。
-      // 不能只钉目标: 钉 = 停动画 + 写内联样式, 上一轮被钉过的元素已无动画可拨回 0,
-      // 内联样式会漏进后续静帧(2026-09-22 实测: 下一张静帧里叠出上一句的深色底板补丁)。
+      // 每张截图共用同一页(逐句字幕图、封面、终态图之间): 每一轮都必须把**全部**字幕重新钉一遍 ——
+      // 目标钉满亮、其余钉隐藏。不能只钉目标: 钉 = 停动画 + 写内联样式, 上一轮被钉过的元素已无
+      // 动画可拨回 0, 内联样式会漏进后续截图(2026-09-22 实测: 下一张静帧里叠出上一句的深色底板补丁)。
       subs.forEach((el, j) => {
         el.style.animation = 'none';
         el.style.opacity = j === k ? '1' : '0';
@@ -270,6 +269,9 @@ for (const s of slides) {
     // 直接跳到所有有限动画的终态(finish), 无限氛围动画保持运行, 截图即终态。
     await page.evaluate(() => {
       document.getAnimations().forEach(a => { try { a.finish(); } catch { /* infinite */ } });
+      // 终态图是"无字幕基底"(build-video 拼在第一句开口前): 显式藏字幕 —— 依赖关键帧终值
+      // 恰好为 0 太脆(1.9.4 的末句形状曾把最后一句烙进基底), 两端隐藏契约另有 unit 测试背书
+      document.querySelectorAll('.kit-sub').forEach(el => { el.style.animation = 'none'; el.style.opacity = '0'; });
     });
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     await page.screenshot({ path: safeOut(dir, 'preview', `${sid}.png`) });

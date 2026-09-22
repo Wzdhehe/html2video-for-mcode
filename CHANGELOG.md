@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.5 — 2026-09-22
+
+**Round-20 review: two regressions introduced by 1.9.4's own fix — found by fresh-eyes review, reproduced visually, fixed and guarded**
+
+- **The cover baked in the last subtitle.** The substill pin (stop the animation + inline styles) left the subtitle elements with no animation for `captureCover`'s hide step to seek (`a.currentTime = 0`), so the last subtitle survived into `preview/cover.png` — which ships as `attached_pic`, `out/cover.png` and the opening 0.25s dissolve. The cover and the still-mode base now hide subtitles explicitly via inline styles instead of relying on animation state.
+- **The still-mode base baked in the last subtitle.** The "last clause emits no fade-out tail" shape left the animation's terminal value at `opacity: 1`, so `finish()` no longer hid subtitles — and the still-mode terminal image is consumed by `build-video` as the subtitle-free base before the first clause. The keyframe shape now satisfies both constraints at once: the plateau holds to **99.999%** and the tail occupies **100%** alone (visible fade-out ≈ 0.001% — the grey-subtitle bug stays fixed) while the terminal value returns to 0 (the "finish() hides" contract the cover and base rely on). The unit contract test now asserts exactly this — first and last keyframe groups must declare `opacity: 0` — which fails against 1.9.4's shape and would have caught it.
+- **Guards + red-proofs:** one pixel assertion each for the cover and the base ("must differ from a sub-bearing still" — the leak measured as diff **0** in both regressions). Red-proofed individually: the cover guard goes red with only the cover hide removed; the base guard and the unit contract go red with the 1.9.4 shape restored.
+- **Corrections to 1.9.4's entry** (it stands as written; this sets the record): ① "all three trees 249 pass / 0 fail / 3 capability skips" is arithmetically impossible — the measurement is **249 tests: 246 pass / 0 fail / 3 skips**; ② "thresholds were recalibrated" — the threshold values were unchanged, the fixture text was (the same sentence's second half describes this correctly); ③ "red-proofed … both new regression tests fail" applies to the keyframe-shape test and the brightness assertions — the dark-floor guard targets the first-cut cross-still leak and is not expected to fail on the pre-fix shape; ④ "the platform was eaten" is a mistranslation — the word is **plateau**.
+- Judgement cleanups from the same review: the duplicated pair-diff helpers in `subtitles-invalidate.test.mjs` merged into one; comment wording fixed (per-screenshot page reuse; the dark-floor comparison's discrimination depends on the fixture's light theme and now says so).
+- Verified: three trees **249 tests / 246 pass / 0 fail / 3 skips**; the affected project re-rendered end-to-end — 12 subtitle stills at full brightness (235), the 1.05s/2.20s frames identical (Δ0), the **cover clean** (title fully revealed, no subtitle — visually checked), and the still-mode base subtitle-free (guarded in the suite).
+
 ## 1.9.4 — 2026-09-22
 
 **Grey/flickering subtitles fixed ("subtitle appears and goes grey within a second, then stays grey") — found in a real production render (the `ai-daily-2026-09-21` project), diagnosed by handoff analysis and reproduced byte-for-byte before fixing**

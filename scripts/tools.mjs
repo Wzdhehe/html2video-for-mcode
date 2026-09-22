@@ -232,20 +232,23 @@ export function subtitleWindows(clauses, duration) {
   });
 }
 
-// 每句一对关键帧: 0%→a 藏, a→p1 淡入, [p1,p2] 满亮, (非末句) p2→b 淡出后藏到片尾。
-// 末句**不生成淡出尾帧** —— b=100 时尾帧会产出 "100%,100%{opacity:0}", 与平台端点同偏移
-// 撞车(同一偏移声明两次时后者生效), 平台被吃掉, 整句退化成缓慢淡出
-// (2026-09-22 实测: 拼接静帧不透明度 0.44, 成片"字幕出现即变灰")。
+// 每句一对关键帧: 0%→a 藏, a→p1 淡入, [p1,p2] 满亮, p2→b 淡出后藏到片尾。
+// 两个形状约束(2026-09-22 双回归的教训, unit 测试背书):
+// ①同偏移不得声明两次 —— 同偏移多次声明时后者生效, 平台会被尾帧整个吃掉
+//   (灰字幕根因: 末句 b=100 时 "100.000%,100%{opacity:0}" 撞掉 "100.000%{opacity:1}", 整句缓慢淡出);
+// ②两端必须隐藏 —— fill both 下 finish() 后回到 opacity:0, 封面/静帧基底图靠它保持无字幕
+//   (1.9.4 曾改成"末句无尾帧"保住①, 却让终值停在 1: 最后一句被烙进封面与基底)。
+// 于是末句平台收到 99.999%、尾帧单占 100%: 可见部分零淡出, 终值仍归 0。
 export function subtitleKeyframes(clauses, duration) {
   return subtitleWindows(clauses, duration).map(({ a, b, isLast }, i) => {
     const win = b - a;
     const fin = Math.min(Math.max(0.15, win * 0.06), 0.8);
     const fout = isLast ? 0 : Math.min(Math.max(0.15, win * 0.06), 0.8);
-    const p1 = Math.min(a + fin, b);
-    const p2 = Math.max(p1, b - fout);
-    const tail = isLast ? '' : `${b.toFixed(3)}%,100%{opacity:0}`;
+    const p1 = isLast ? Math.min(a + fin, 99.999) : Math.min(a + fin, b);
+    const p2 = isLast ? 99.999 : Math.max(p1, b - fout);
     return `@keyframes kit-sub-${i}{0%,${a.toFixed(3)}%{opacity:0}` +
-      `${p1.toFixed(3)}%,${p2.toFixed(3)}%{opacity:1}` + tail + `}`;
+      `${p1.toFixed(3)}%,${p2.toFixed(3)}%{opacity:1}` +
+      `${b.toFixed(3)}%,100%{opacity:0}}`;
   }).join('');
 }
 

@@ -13,6 +13,15 @@ import { runSkill, tmpdir, FRESH_TOKENS } from './helpers.mjs';
 const FFMPEG = findTool('ffmpeg');
 const FFPROBE = findTool('ffprobe');
 
+// 两图逐像素差(YAVG): 本文件唯一的成对差异实现(两个用例共用)
+const imgDiff = (a, b) => {
+  const o = spawnSync(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-i', a, '-i', b,
+    '-lavfi', '[0:v][1:v]blend=all_mode=difference,signalstats,metadata=print:file=-', '-frames:v', '1', '-f', 'null', '-'],
+    { encoding: 'utf8', windowsHide: true });
+  const m = /YAVG=([0-9.]+)/.exec((o.stdout || '') + (o.stderr || ''));
+  return m ? parseFloat(m[1]) : null;
+};
+
 test('字幕静帧随字幕作废: 删掉一句 / --no-subs 重建后, 成片不得再出现旧字幕(像素级)', async t => {
   if (!FFMPEG || !FFPROBE) return t.skip('无 ffmpeg/ffprobe(主 CI 环境; 由 scoped smoke workflow 覆盖)');
   const playwright = await loadPackage('playwright');
@@ -42,13 +51,7 @@ test('字幕静帧随字幕作废: 删掉一句 / --no-subs 重建后, 成片不
   // 字幕条: 模板里 .kit-sub 是 bottom: 7.78% × 1080 ≈ 84px、40px 字、居中 → 取正下方居中一块,
   // 比整条字幕带敏感得多(整带 1920×260 会把字幕只占的一小块平均掉)
   const box = 'crop=600:140:660:890';
-  const YAVG = (a, b) => {
-    const o = spawnSync(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-i', a, '-i', b,
-      '-lavfi', '[0:v][1:v]blend=all_mode=difference,signalstats,metadata=print:file=-', '-frames:v', '1', '-f', 'null', '-'],
-      { encoding: 'utf8', windowsHide: true });
-    const m = /YAVG=([0-9.]+)/.exec((o.stdout || '') + (o.stderr || ''));
-    return m ? parseFloat(m[1]) : null;
-  };
+  const YAVG = imgDiff;
   const crop = (src, out) => { spawnSync(FFMPEG, ['-y', '-hide_banner', '-loglevel', 'error', '-i', src, '-vf', box, out], { windowsHide: true }); return out; };
   // 字幕带亮度统计: YMAX=文字峰值(满亮 235 档, 截在淡变上掉到 ~130), YMIN=底板地板(叠框会下陷)
   const STATS = img => {
@@ -79,11 +82,19 @@ test('字幕静帧随字幕作废: 删掉一句 / --no-subs 重建后, 成片不
     console.log(`    实测(第 ${k + 1} 句静帧字幕带 YMAX, 满亮=235 档): ${y}`);
     assert.ok(y != null && y >= 200, `第 ${k + 1} 句的拼接静帧必须满不透明(字幕带峰值 ${y})`);
   }
-  // 跨句残留防漏(2026-09-22): 逐帧截图共用一页, 钉过的字幕若漏进后续静帧, 会叠出深色底板补丁 ——
-  // 两张静帧的暗部地板必须一致(相对判据, 不依赖主题底色)
+  // 跨句残留防漏(2026-09-22): 同一页逐张截图, 钉过的字幕若漏进后续静帧, 会叠出深色底板补丁 ——
+  // 两张静帧的暗部地板必须一致(同夹具成对比较; 暗主题下叠框差会缩小, 夹具固定 theme a 才够判别力)
   const floor = [YFLOOR(subFile(0)), YFLOOR(subFile(1))];
   console.log(`    实测(两句静帧字幕带暗部地板, 应一致): ${floor.join(' / ')}`);
   assert.ok(Math.abs(floor[0] - floor[1]) <= 12, `上一句字幕不得漏进下一张静帧(暗部地板 ${floor.join(' / ')})`);
+  // 封面与静帧基底不得烙字幕(2026-09-22 修复的两条回归): 两者都是"无字幕终态图" —— 封面曾被
+  // 钉死残留烙进最后一句, 基底曾被末句关键帧终值烙进最后一句。与带字幕静帧在字幕带上必须有
+  // 明显差异, ≈0 即说明字幕被烙进了无字幕图。
+  for (const [label, img] of [['封面', path.join(proj, 'preview', 'cover.png')], ['静帧基底', path.join(proj, 'preview', '01.png')]]) {
+    const d = YAVG(crop(img, path.join(work, `${label}-band.png`)), crop(subFile(1), path.join(work, 'leak-s1-band.png')));
+    console.log(`    实测(${label} 与带字幕静帧的差异, ≈0=字幕被烙进): ${d}`);
+    assert.ok(d != null && d > 3, `${label} 不得烙进字幕(与带字幕静帧差异仅 ${d})`);
+  }
   const oldS1 = path.join(work, 'old-s1.png');
   fs.copyFileSync(subFile(1), oldS1);
 
@@ -152,13 +163,7 @@ test('清单帧覆盖与当前帧序列不一致 → 忽略清单(像素级: 陈
   assert.equal(spawnSync(FFMPEG, ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=0x808080:s=1920x1080', '-frames:v', '1',
     '-y', path.join(proj, 'preview', 'cover.png')], { windowsHide: true }).status, 0, '应能造出封面占位');
 
-  const diff = (a, b) => {
-    const o = spawnSync(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-i', a, '-i', b,
-      '-lavfi', '[0:v][1:v]blend=all_mode=difference,signalstats,metadata=print:file=-', '-frames:v', '1', '-f', 'null', '-'],
-      { encoding: 'utf8', windowsHide: true });
-    const m = /YAVG=([0-9.]+)/.exec((o.stdout || '') + (o.stderr || ''));
-    return m ? parseFloat(m[1]) : null;
-  };
+  const diff = imgDiff;
   const grab = (t0, out) => { spawnSync(FFMPEG, ['-y', '-hide_banner', '-loglevel', 'error', '-ss', String(t0),
     '-i', path.join(proj, 'out', 'final.mp4'), '-frames:v', '1', out], { windowsHide: true }); return out; };
   const manPath = path.join(stills, '01.json');
@@ -181,37 +186,41 @@ test('清单帧覆盖与当前帧序列不一致 → 忽略清单(像素级: 陈
   assert.ok(dOk != null && dOk < 2.5, `对齐清单的静帧应当拼入画面(与红色静帧差异 ${dOk})`);
 });
 
-// 2026-09-22 灰字幕回归(工具层, 无工具门槛): 末句关键帧曾把 100% 声明两遍(尾帧与平台端点
-// 同偏移, 同偏移多次声明后者生效) → 平台被吃成缓慢淡出, 静帧截在半山腰(实测 0.44)。
-// 判据四条: 无同偏移撞车 / 末句无淡出尾帧 / 非末句保留尾帧 / 偏移不越 [0,100] 且单调。
-test('字幕关键帧形状: 末句无尾帧、无同偏移撞车、偏移不越界(工具层)', () => {
+// 2026-09-22 灰字幕回归(工具层, 无工具门槛)。形状契约四条, 前两条各抓过一次真回归:
+// ①两端隐藏: fill both 下 finish() 后回到 opacity:0 —— 封面/静帧基底图靠它保持无字幕
+//   (1.9.4 的"末句无尾帧"形状让终值停在 1, 最后一句被烙进封面与基底);
+// ②无同偏移撞车: 同偏移多次声明时后者生效, 平台会被尾帧吃掉(灰字幕根因);
+// ③末句零可见淡出(平台保持到片尾) / 非末句保留切换淡出; ④偏移不越 [0,100] 且单调。
+test('字幕关键帧形状: 两端隐藏契约、末句零可见淡出、无同偏移撞车(工具层)', () => {
   const parse = css => (css.match(/@keyframes kit-sub-\d+\{(?:[^{}]|\{[^{}]*\})*\}/g) ?? []).map(blk => {
-    const groups = blk.match(/[\d.,%]+\{opacity:[\d.]+\}/g) ?? [];
-    const offsets = [];
-    for (const g of groups) {
-      const sel = g.split('{')[0];
-      // 同一选择器列表里的重复偏移是同一声明的别名(如 100.000%,100%), 不算撞车
-      offsets.push(...new Set(sel.split(',').map(parseFloat)));
-    }
-    return { blk, offsets };
+    const groups = [...blk.matchAll(/([\d.,%]+)\{opacity:([\d.]+)\}/g)].map(m => ({
+      offsets: [...new Set(m[1].split(',').map(parseFloat))],   // 同一选择器列表里的重复偏移是别名(如 100.000%,100%), 不算撞车
+      opacity: parseFloat(m[2]),
+    }));
+    return { blk, groups, offsets: groups.flatMap(g => g.offsets) };
   });
 
-  // 单句(即末句): 修复前会产出 "...,100.000%{opacity:1}100.000%,100%{opacity:0}}" 的撞车尾帧
-  const one = subtitleKeyframes([{ start: 0.1, text: 'x' }], 3);
-  assert.doesNotMatch(one, /100\.000%,100%|100%,100\.000%/, `末句不得生成淡出尾帧: ${one}`);
-  assert.match(one, /\{opacity:1\}\}$/, `末句平台应保持到片尾: ${one}`);
-
-  // 两句: 末句无尾帧, 首句(非末句)必须保留尾帧(防修过头把切换淡出也删了)
-  const two = subtitleKeyframes([{ start: 0 }, { start: 1.2, text: 'x' }], 3);
-  assert.equal((two.match(/%,100%\{opacity:0\}/g) ?? []).length, 1, `应只有非末句一条尾帧: ${two}`);
-
-  // 形状不变量: 每对关键帧内偏移不越 [0,100] 且单调不减, 跨块不撞偏移
-  for (const list of [one, two, subtitleKeyframes([{ start: 0 }, { start: 2.994 }], 3)]) {
-    for (const { blk, offsets } of parse(list)) {
-      assert.ok(offsets.length > 0, `应能解析出偏移: ${blk}`);
+  const suites = [
+    { name: '单句(即末句)', css: subtitleKeyframes([{ start: 0.1 }], 3), lasts: [true] },
+    { name: '两句', css: subtitleKeyframes([{ start: 0 }, { start: 1.2 }], 3), lasts: [false, true] },
+    { name: '末句起点 99.8%', css: subtitleKeyframes([{ start: 0 }, { start: 2.994 }], 3), lasts: [false, true] },
+  ];
+  for (const { name, css, lasts } of suites) {
+    const blocks = parse(css);
+    assert.equal(blocks.length, lasts.length, `${name}: 块数应等于句数`);
+    for (let i = 0; i < blocks.length; i++) {
+      const { blk, groups, offsets } = blocks[i];
+      assert.ok(offsets.length > 0 && groups.length >= 3, `应解析出关键帧组: ${blk}`);
       assert.ok(offsets.every(o => o >= 0 && o <= 100), `偏移越界(CSS 关键帧选择器只认 0–100%): ${blk}`);
-      for (let i = 1; i < offsets.length; i++) assert.ok(offsets[i] >= offsets[i - 1], `偏移乱序: ${blk}`);
-      assert.equal(new Set(offsets).size, offsets.length, `同偏移声明两次(后者会吃掉前者): ${blk}`);
+      for (let j = 1; j < offsets.length; j++) assert.ok(offsets[j] >= offsets[j - 1], `偏移乱序: ${blk}`);
+      assert.equal(new Set(offsets).size, offsets.length, `同偏移声明两次(后者会吃掉前者, 灰字幕根因): ${blk}`);
+      assert.equal(groups[0].opacity, 0, `起点必须隐藏: ${blk}`);
+      assert.equal(groups.at(-1).opacity, 0, `100% 终值必须归 0(finish() 后自动隐藏的契约): ${blk}`);
+      assert.ok(groups.at(-1).offsets.includes(100), `尾帧应落在 100%: ${blk}`);
+      const plateau = groups.find(g => g.opacity === 1);
+      const fade = groups.at(-1).offsets[0] - plateau.offsets.at(-1);
+      if (lasts[i]) assert.ok(fade < 0.1, `末句不得有可见淡出(淡出窗 ${fade}%): ${blk}`);
+      else assert.ok(fade >= 0.1, `非末句应保留切换淡出(淡出窗 ${fade}%): ${blk}`);
     }
   }
   // b 夹紧: 末句起点晚于 99.5% 时窗口终点不得越过 100
