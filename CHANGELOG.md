@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.6 — 2026-09-22
+
+**mcode-first tool choice made explicit** (field report: an agent running inside the mcode sandbox reached for mmx-cli and forgot the mcode tools were available)
+
+- The runtime table already marked the mcode column `(preferred)` and the TTS cell `(the main path)`, and mmx-cli setup was scoped to "(non-mcode environments)" — but the discipline paragraph named `asr.mjs` **unconditionally**, and since 1.9.0 `asr.mjs` auto-picks `mmx speech transcribe` whenever mmx-cli is installed. Following that sentence for voice verification in the mcode sandbox leads straight to mmx-cli.
+- Two documentation fixes, no code change: (1) a hard environment rule above the table — in the mcode sandbox use the left column only, do not install or call mmx-cli there (`mcode-tools` covers TTS, music and ASR); (2) the voice-verification sentence now names the per-environment tool (mcode sandbox: `mcode-tools upload_temp_url` + `connector__matrix__listen_audio`; other environments: `asr.mjs`).
+
 ## 1.9.5 — 2026-09-22
 
 **Round-20 review: two regressions introduced by 1.9.4's own fix — found by fresh-eyes review, reproduced visually, fixed and guarded**

@@ -79,6 +79,8 @@ npm i playwright && npx playwright install chromium        # for screenshots
 
 The script layer (screenshots / rendering / compositing / validation / images) is completely environment-agnostic; **only TTS, music and ASR depend on platform capabilities**.
 
+**Environment rule (hard): in the mcode sandbox use the left column only — do not install or call mmx-cli there; `mcode-tools` covers TTS, music and ASR. mmx-cli is the fallback toolchain for non-mcode hosts only.**
+
 | Capability | mcode sandbox (preferred) | Other Agent environments (Claude Code / OpenClaw / Cursor, etc.) |
 |---|---|---|
 | TTS synthesis | `mcode-tools connector call connector__matrix__batch_text_to_audio --args '{...}'` (≤10 items per batch, the main path); for a single voice test use `connector__matrix__synthesize_speech` | `mmx speech synthesize --text "第一句口播。" --voice <voice_id> --speed 1.1 --out audio/01.mp3`; voice list via `mmx speech voices` |
@@ -90,7 +92,7 @@ The script layer (screenshots / rendering / compositing / validation / images) i
 
 **First-time mmx-cli setup** (non-mcode environments): `npm install -g mmx-cli` (TTS works on any version; ASR needs ≥ 1.0.26 for `speech transcribe`) → `mmx auth login --api-key sk-xxx` → verify with `mmx quota`. A 401 is usually a region mismatch: `mmx config set --key region --value cn|global`. On the script side, ASR reuses that same mmx login; set `MINIMAX_API_KEY` (+ `MINIMAX_REGION=cn|global`) only if you force the direct-REST path (`--provider api`).
 
-**Discipline does not change with the environment**: durations still come from ffprobe measurements, subtitles still come from `clauses[]`, voices still have to be auditioned and language-verified (via asr.mjs above), and no Gate is skipped. **Search and body-text extraction are not limited to the tools in the table above either**: if other search skills/plugins are installed locally (web search, web reading, etc.), or any headless browser (the project's Playwright counts), use whichever one can get the body text — only the tool changes; source grading, two-source cross-checking and scope annotation are not negotiable.
+**Discipline does not change with the environment**: durations still come from ffprobe measurements, subtitles still come from `clauses[]`, voices still have to be auditioned and language-verified (mcode sandbox: `mcode-tools upload_temp_url` + `connector__matrix__listen_audio`; other environments: `asr.mjs` above), and no Gate is skipped. **Search and body-text extraction are not limited to the tools in the table above either**: if other search skills/plugins are installed locally (web search, web reading, etc.), or any headless browser (the project's Playwright counts), use whichever one can get the body text — only the tool changes; source grading, two-source cross-checking and scope annotation are not negotiable.
 
 ## Workflow (7 phases · 6 Gates)
 
