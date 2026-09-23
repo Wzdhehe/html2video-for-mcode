@@ -281,6 +281,23 @@ export function canonicalPath(p) {
 // `capture --allow-stale-css <项目>` 会对着调用目录干活, 真正的项目一个字节都没被碰。
 // 同理 prep-image 的 --check/--crop 也**不列**: 它们的"参数"本来就是位置参数(一串文件名)。
 // tests/review-round3.test.mjs 有一条从 scripts 源码反扫 argv.includes('--x') 的守卫, 防以后再犯。
+// ── CLI 入口守卫(单一来源) ───────────────────────────────────────────
+// "被 import 不跑主流程, 直接执行才跑" 的判定要稳健: 两侧都取 realpath —— 经符号链接调用时
+// argv[1] 是链接路径而 import.meta.url 是 real 路径, 纯字符串比较恒假 → 脚本静默 no-op
+// (exit 0 无输出; 2026-09-22 云沙箱实测, 排查花了 10 分钟)。同名文件当入口也算直接执行
+// (网络盘大小写/异形路径的残留情形) —— 宁可多跑一次主流程, 也不允许"静默不跑"这个形态。
+// 另注: `node -e "import('...')"` 走的是 import 语义, 不跑 main(设计如此) —— CLI 请 `node <脚本> ...`。
+export function isMainModule(metaUrl, entry = process.argv[1]) {
+  if (!entry) return false;
+  const real = p => { try { return fs.realpathSync(path.resolve(p)); } catch { return path.resolve(p); } };
+  const meta = fileURLToPath(metaUrl);
+  const eq = process.platform === 'win32'
+    ? (a, b) => a.toLowerCase() === b.toLowerCase()
+    : (a, b) => a === b;
+  if (eq(real(entry), real(meta))) return true;
+  return eq(path.basename(entry), path.basename(meta));
+}
+
 export const VALUE_FLAGS = new Set([
   '--topic', '--mode', '--dsf', '--ids', '--at', '--min', '--max-mb', '--get', '--out', '--out-dir',
   '--file', '--format', '--from', '--url', '--base-url', '--api-key', '--language',

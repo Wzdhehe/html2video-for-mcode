@@ -21,7 +21,7 @@ Principle = deterministic frame-by-frame stepping:
 3. `page.screenshot()` each frame into a PNG sequence.
 4. At encode time `tpad=stop_mode=clone` clones the last frame to fill the whole slide duration: only the animation window is rendered frame by frame, still segments cost nothing.
 
-Shoot only the animation window (longest animation endTime + 0.25s) rather than the full slide duration; 8 slides × 30fps usually needs only 600–1200 frames, about 2–6 minutes (50–200ms/frame). Budget it into the timeout, don't kill it midway.
+Shoot only the animation window (longest animation endTime + 0.25s) rather than the full slide duration; 8 slides × 30fps usually needs only 600–1200 frames, about 2–6 minutes (50–200ms/frame). Budget it into the timeout, don't kill it midway. Slides with long entrance choreography scale linearly (frames = Σ per-slide animation windows × fps — measured: 5 × 15s ≈ 2250 frames, 6–8 min) — for quick passes drop `fps` to 24 in `script.json`, trim the choreography, or shoot in batches (`--ids 01,02`, then `--ids 03,04`; frame dirs are per-slide and accumulate).
 
 Limitation (which is what decides when to fall back to still): all page motion must be driven by CSS `@keyframes` / WAAPI. `<video>` elements, `setTimeout` choreography and rAF physics cannot be seeked — this layout spec already disables them, so you normally won't hit this.
 

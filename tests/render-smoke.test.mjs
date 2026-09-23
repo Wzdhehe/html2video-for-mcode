@@ -368,3 +368,29 @@ test('骨架 .layout 必须是 safe center + 上下 padding(溢出退回顶部�
   assert.match(tpl, /justify-content:\s*safe center/, '普通 center 溢出时会把内容推上画布裁掉(实测 kicker y≈17px)');
   assert.match(tpl, /padding:\s*120px\s+160px\s+190px/, '上 padding 给品牌栏、下 padding 给字幕带');
 });
+
+// 2026-09-22 云沙箱反馈: 字幕"会换行"警告按 18 字一刀切 —— 18 是 1080 宽竖屏的单行基准,
+// 横屏 1920 行宽 ≈32 字/行(20-32 字根本不换行, 误报); 且折 2 行可读。现按画布宽估行宽, 折 3 行才报。
+test('plan-timings 字幕行宽: 按画布宽度估, 折 2 行不报、3 行报', async t => {
+  if (!FFMPEG) return t.skip('无 ffmpeg/ffprobe(ffprobe 实测音频)');
+  const proj = tmpdir();
+  assert.equal(runSkill('init-project.mjs', [proj, '--topic', 'SubCap']).status, 0);
+  const g = spawnSync(FFMPEG, ['-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=32000:cl=mono', '-t', '3',
+    '-c:a', 'libmp3lame', '-b:a', '64k', '-y', path.join(proj, 'audio', '01.mp3')], { windowsHide: true });
+  assert.equal(g.status, 0, g.stderr ?? '');
+  const sp = path.join(proj, 'script.json');
+  const s = JSON.parse(fs.readFileSync(sp, 'utf8'));
+  s.width = 1920; s.height = 1080;
+  s.slides = [{ id: '01', html: '01-title.html', audio: '01.mp3', clauses: [
+    { stage: 1, text: '一'.repeat(60) },    // 60 字 ÷ ≈32 字/行 = 2 行 —— 可读, 不报
+    { stage: 2, text: '二'.repeat(100) },   // 100 字 = 4 行 —— 报
+  ] }];
+  fs.writeFileSync(sp, JSON.stringify(s, null, 2));
+  fs.writeFileSync(path.join(proj, 'slides', '01-title.html'),
+    '<!doctype html><html><head><meta charset="utf-8"></head><body><div class="stage"></div></body></html>');
+  const r = runSkill('plan-timings.mjs', [proj]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const out = r.stdout + r.stderr;
+  assert.ok(!/第 1 句.*会折/.test(out), '折 2 行不该报(横屏行宽 ≈32 字/行): ' + out.slice(-300));
+  assert.match(out, /第 2 句.*会折 4 行/, '折 3 行以上必须报: ' + out.slice(-300));
+});

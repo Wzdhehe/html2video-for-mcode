@@ -28,3 +28,6 @@ Use it two ways: as trigger examples (the user describes one of these and you re
 - Stale styling after the skill updated (`new classes have no effect`) → `init-project.mjs --check-css` / `--upgrade-css`; see `references/render.md`.
 
 > When a symptom points at a script, run it with `--quiet`/`--ids` to narrow first; every diagnostic script prints the exact next command on failure.
+| a script exits 0 with no output at all (printed nothing, did nothing) | you **imported** the CLI instead of running it — `node -e "import(…)"` never runs `main` by design; run `node <script> …` instead. (Before 1.9.9 an entry reached through a symlinked path could also silently no-op — the entry guard compared raw paths) |
+| Playwright in a cloud sandbox cannot find its browser (`chrome-headless-shell` path errors) | partial browser install: `npx playwright install chromium` lays down `chromium-*/chrome-linux/chrome` while some runtimes look for `chromium_headless_shell-*/…/chrome-headless-shell` — copy+rename the binary as a stopgap (seen on mavis-like sandboxes) |
+| `git clone` from GitHub fails with a certificate/SSL error in a locked-down sandbox | fetch the archive instead: `curl -o repo.zip https://codeload.github.com/<owner>/<repo>/zip/refs/heads/main` (seen on mavis-like sandboxes) |

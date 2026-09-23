@@ -390,3 +390,21 @@ describe('预览放映页 · 逐级步进(动效开)+ 无重播(2026-09-18 实�
     }
   });
 });
+
+// 2026-09-22 云沙箱实测: 入口守卫经符号链接/异形路径调用恒假 → 脚本静默 no-op(exit 0 无输出,
+// 排查了 10 分钟)。isMainModule 两侧 realpath + 同名兜底, 这里把三种形态钉死。
+test('isMainModule: 入口判定稳健(符号链接/同名兜底/被 import 不跑)', async t => {
+  const { isMainModule } = await import('file://' + path.join(SCRIPTS, 'tools.mjs').split(path.sep).join('/'));
+  const { pathToFileURL } = await import('node:url');
+  const dir = tmpdir();
+  const real = path.join(dir, 'probe.mjs');
+  fs.writeFileSync(real, '// probe\n');
+  const meta = pathToFileURL(real).href;
+  assert.equal(isMainModule(meta, real), true, '同一路径直接执行必须为真');
+  assert.equal(isMainModule(meta, path.join(dir, 'other.mjs')), false, '别的脚本 import 时必须为假');
+  assert.equal(isMainModule(meta, undefined), false, '无入口(如 node -e "import()")为假 —— import 语义不跑 main 是设计');
+  assert.equal(isMainModule(meta, path.join(dir, 'sub', 'probe.mjs')), true, '同名不同目录 = 直接执行兜底(宁可多跑, 拒绝静默)');
+  const link = path.join(dir, 'link.mjs');
+  try { fs.symlinkSync(real, link, 'file'); } catch { return t.skip('当前环境建不了文件符号链接(Windows 需开发者模式)'); }
+  assert.equal(isMainModule(meta, link), true, '经符号链接调用必须为真(realpath 两侧) — 修复前恒假');
+});

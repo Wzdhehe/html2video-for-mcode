@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.9 — 2026-09-22
+
+**Cloud-sandbox field batch: entry guard could silently no-op; subtitle wrap warning mis-fired** (report from a mavis-style web sandbox session, sorted by the reporter into skill issues vs environment quirks)
+
+- **🔴 Silent no-op entry guard (the core bug).** `preview-page.mjs`'s "run `main` only when executed directly" check compared `path.resolve(argv[1])` with `fileURLToPath(import.meta.url)` — for an entry reached through a **symlinked path** the module URL is the real path while `argv[1]` is the link path, so the comparison is always false: the script exits 0 with **no output and no work done** (the reporter burned ~10 minutes proving `main` hadn't run). The check is now `tools.isMainModule` (single source): realpath both sides, plus a same-basename fallback so the "silent skip" shape is impossible in practice. Clarified in the same comment: `node -e "import(…)"` does not run `main` by design (import semantics) — run CLIs as `node <script> …`. (The reporter attributed this to ESM module caching; caches do not span processes — the path-shape mismatch is the mechanism, and the symlink case is the one that reproduces.)
+- **🟡 Subtitle wrap warning was calibrated on portrait and mis-fired on landscape.** The `> 18 characters` limit is the single-line baseline at 1080 width (≈18 CJK chars per line); at 1920 the pill fits ≈32, so 20–32-char sentences were warned "will wrap" without wrapping at all — and two wrapped lines read fine anyway. `plan-timings` now estimates line width from the canvas width and warns at **three or more** lines (naming the estimated width and line count).
+- **🟡 Capture runtime expectations documented** (`references/render.md`): frame count scales with entrance-choreography windows (measured 5 × 15s ≈ 2250 frames ≈ 6–8 min); quick passes can drop `fps` to 24, trim choreography, or shoot in `--ids` batches (frame dirs are per-slide).
+- **🟢 Environment quirks recorded in `references/symptoms.md`** (not skill defects, but sandbox users hit them repeatedly): partial Playwright browser installs in cloud sandboxes (`chromium-*` vs `chromium_headless_shell-*` layout, copy+rename stopgap) and `git clone` SSL failures (use the `codeload.github.com` zip).
+- **Tests +2 (256 in fourteen files):** `isMainModule` (direct / imported / same-name fallback / symlinked entry — the symlink case runs wherever file symlinks exist, including Linux CI) and the plan-timings width-aware threshold (2 lines silent, 3+ named). Red-proofed: reverting the guard to raw-path comparison reddens the entry test.
+
 ## 1.9.8 — 2026-09-22
 
 **Layout-overflow protection: safe-center scaffold + a capture-time geometry self-check** (field report: a dense table/data-viz slide had its kicker pushed to y≈17px — clipped at the canvas top — and the screenshot review passed it as fine)

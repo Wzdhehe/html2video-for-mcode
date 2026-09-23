@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { expectedTokens, positionalDir, safeId, safeOut, safeRel, validateScriptPaths } from './tools.mjs';
+import { expectedTokens, isMainModule, positionalDir, safeId, safeOut, safeRel, validateScriptPaths } from './tools.mjs';
 import { NOFX_CSS } from './nofx-css.mjs';
 import { KITS, TOKENS_ID, findAllBlocks, kitStatuses, MAX_SCAN_BYTES } from './css-kit.mjs';
 import { generateTokensCss } from './tokens-template.mjs';
@@ -632,6 +632,6 @@ function main() {
   }
 }
 
-// 被 tests/ import 时不要跑主流程(只有当脚本直接执行才跑)
-const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase();
-if (invokedDirectly) main();
+// 被 tests/ import 时不要跑主流程(只有当脚本直接执行才跑)。判定走 tools.isMainModule:
+// realpath 两侧 + 同名兜底 —— 经符号链接/异形路径调用曾恒假静默 no-op(2026-09-22 云沙箱实测)
+if (isMainModule(import.meta.url)) main();

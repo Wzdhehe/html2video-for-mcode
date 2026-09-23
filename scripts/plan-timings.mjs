@@ -84,9 +84,14 @@ for (const s of script.slides) {
   const stages = Object.keys(stageTime).map(Number);
   const last = stages.length ? Math.max(...stages) : 0;
   if (last > 0 && duration - (stageTime[last] ?? 0) < 1.2) warns.push(`${s.id}: 最后一个 stage 在 ${stageTime[last].toFixed(1)}s, 距收尾不足 1.2s — 观众看不清, 建议 tail 加大或精简口播`);
+  // 字幕行宽按画布宽度估: CFG.subMax 是 1080 宽下的单行基准(.kit-sub: max-width 72.9167% −
+  // 34px×2 padding, 字号 40px —— 1080 宽 ≈18 汉字/行, 1920 宽 ≈32)。折 2 行可读, 折 3 行起才警告
+  // (2026-09-22 云沙箱反馈: 横屏按 18 判"会换行"是误报, 且 2 行内不影响阅读)。
+  const subCap = Math.max(8, Math.floor(CFG.subMax * ((script.width ?? 1920) / 1080)));
   for (const c of clauses) {
     const n = charCount(c.text);
-    if (n > CFG.subMax) warns.push(`${s.id} 第 ${clauses.indexOf(c) + 1} 句 ${n} ${CFG.unit} > ${CFG.subMax}, 字幕会换行 — 建议拆句`);
+    const lines = Math.ceil(n / subCap);
+    if (lines >= 3) warns.push(`${s.id} 第 ${clauses.indexOf(c) + 1} 句 ${n} ${CFG.unit}(行宽 ≈${subCap} ${CFG.unit}/行) 会折 ${lines} 行 — 3 行起可读性差, 建议拆句(≤2 行可接受)`);
     if (c.text2 && c.text2.length > 60) warns.push(`${s.id} 第 ${clauses.indexOf(c) + 1} 句双语第二行 ${c.text2.length} 字符 > 60 — 建议精简译文`);
   }
 
