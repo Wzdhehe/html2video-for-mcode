@@ -369,9 +369,10 @@ test('骨架 .layout 必须是 safe center + 上下 padding(溢出退回顶部�
   assert.match(tpl, /padding:\s*120px\s+160px\s+190px/, '上 padding 给品牌栏、下 padding 给字幕带');
 });
 
-// 2026-09-22 云沙箱反馈: 字幕"会换行"警告按 18 字一刀切 —— 18 是 1080 宽竖屏的单行基准,
-// 横屏 1920 行宽 ≈32 字/行(20-32 字根本不换行, 误报); 且折 2 行可读。现按画布宽估行宽, 折 3 行才报。
-test('plan-timings 字幕行宽: 按画布宽度估, 折 2 行不报、3 行报', async t => {
+// 2026-09-22 云沙箱反馈 + 2026-09-23 复核: 字幕"会换行"警告曾按 18 字一刀切 —— 18 是被取代的
+// 竖屏基准, 真实行宽 = tools.subLineCap(缩放带钳位, 非线性): 中文 1080≈24 字/行、1920≈33、2560≈35。
+// 折 2 行可读, 折 3 行起才警告。样例覆盖 2/3/4 行三档。
+test('plan-timings 字幕行宽: 折 2 行不报、3 行起报(样例 2/3/4 行)', async t => {
   if (!FFMPEG) return t.skip('无 ffmpeg/ffprobe(ffprobe 实测音频)');
   const proj = tmpdir();
   assert.equal(runSkill('init-project.mjs', [proj, '--topic', 'SubCap']).status, 0);
@@ -382,8 +383,9 @@ test('plan-timings 字幕行宽: 按画布宽度估, 折 2 行不报、3 行报'
   const s = JSON.parse(fs.readFileSync(sp, 'utf8'));
   s.width = 1920; s.height = 1080;
   s.slides = [{ id: '01', html: '01-title.html', audio: '01.mp3', clauses: [
-    { stage: 1, text: '一'.repeat(60) },    // 60 字 ÷ ≈32 字/行 = 2 行 —— 可读, 不报
-    { stage: 2, text: '二'.repeat(100) },   // 100 字 = 4 行 —— 报
+    { stage: 1, text: '一'.repeat(60) },    // 60 ÷ ≈33 字/行 = 2 行 —— 可读, 不报
+    { stage: 2, text: '二'.repeat(70) },    // 70 = 3 行 —— 报
+    { stage: 3, text: '三'.repeat(100) },   // 100 = 4 行 —— 报
   ] }];
   fs.writeFileSync(sp, JSON.stringify(s, null, 2));
   fs.writeFileSync(path.join(proj, 'slides', '01-title.html'),
@@ -391,6 +393,18 @@ test('plan-timings 字幕行宽: 按画布宽度估, 折 2 行不报、3 行报'
   const r = runSkill('plan-timings.mjs', [proj]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const out = r.stdout + r.stderr;
-  assert.ok(!/第 1 句.*会折/.test(out), '折 2 行不该报(横屏行宽 ≈32 字/行): ' + out.slice(-300));
-  assert.match(out, /第 2 句.*会折 4 行/, '折 3 行以上必须报: ' + out.slice(-300));
+  assert.ok(!/第 1 句.*会折/.test(out), '折 2 行不该报(1920 宽行宽 ≈33 字/行): ' + out.slice(-300));
+  assert.match(out, /第 2 句.*会折 3 行/, '折 3 行必须报: ' + out.slice(-300));
+  assert.match(out, /第 3 句.*会折 4 行/, '折 4 行必须报: ' + out.slice(-300));
+});
+
+// 2026-09-23 复核钉死: 胶囊几何唯一来源 tools.subLineCap —— 缩放带钳位, 按宽度线性外推是错的
+// (1.9.9 的 18×W/1080 在 1080 过报 27%、2560 漏报真折行)。数字来自 .kit-sub 的 CSS 常量。
+test('subLineCap: 字幕胶囊行宽几何(钳位后非线性, 数字钉死)', async () => {
+  const { subLineCap, subScale } = await import('file://' + path.join(SCRIPTS, 'tools.mjs').split(path.sep).join('/'));
+  assert.equal(subScale(1080), 0.75, '1080 宽钳到下限 0.75');
+  assert.equal(subLineCap(1080), 24);          // (0.729167·1080 − 68·0.75)/(40·0.75) ≈ 24.6
+  assert.equal(subLineCap(1920), 33);          // (0.729167·1920 − 68)/40 ≈ 33.3
+  assert.equal(subLineCap(2560), 35);          // 缩放钳到 1.25 ≈ 35.6 —— 线性外推会给 42(错)
+  assert.equal(subLineCap(1080, 0.44), 55);    // 拉丁 ≈0.44em/字符
 });

@@ -91,7 +91,7 @@ Measured usable Mandarin voices (2026-09-17, mcode matrix):
 
 1. **What language the narration script** is written in (`clauses[].text`); when bilingual, `text2` holds the **other language** (main line = narration language).
 2. **The voice must match the language** — Chinese uses `Chinese (Mandarin)_*`, English uses `English_*`, Cantonese uses the corresponding Cantonese voices. A mismatch shows up as "accented / mispronounced / language drift", and must be verified with ASR once written.
-3. **Character-count and speech-rate baselines**: `plan-timings` switches automatically by `lang` — Chinese 5.3 chars/s @speed 1.1 (4.8 at 1.0; typically 3–6.5), English ~14 chars/s (typically 9–18, about 150 words/min); the single-line subtitle limit is 18 chars for Chinese / 42 characters for English.
+3. **Character-count and speech-rate baselines**: `plan-timings` switches automatically by `lang` — Chinese 5.3 chars/s @speed 1.1 (4.8 at 1.0; typically 3–6.5), English ~14 chars/s (typically 9–18, about 150 words/min); the single-line subtitle craft guideline is 18 chars for Chinese / 42 for English, while the pill itself fits ≈24 CJK chars per line at 1080 width and ≈33 at 1920 (it scales with the canvas) — plan-timings warns at three or more pill lines.
 4. **The ASR language header**: `asr.mjs` reads `lang` and automatically passes `language: zh|en|yue`. Chinese projects check "whether traditional characters show up" (= Cantonese), English projects check "whether Chinese characters are mixed in".
 
 **Changing language takes only three steps**: change `script.json`'s `lang` → swap in a matching `voice_id` and redo TTS → if bilingual, add/replace `text2` for each sentence. Neither the layout nor the script logic needs to change.

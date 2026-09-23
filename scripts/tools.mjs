@@ -281,21 +281,40 @@ export function canonicalPath(p) {
 // `capture --allow-stale-css <项目>` 会对着调用目录干活, 真正的项目一个字节都没被碰。
 // 同理 prep-image 的 --check/--crop 也**不列**: 它们的"参数"本来就是位置参数(一串文件名)。
 // tests/review-round3.test.mjs 有一条从 scripts 源码反扫 argv.includes('--x') 的守卫, 防以后再犯。
+// ── 字幕条(.kit-sub)几何 —— 唯一来源 ─────────────────────────────────
+// capture 注入的字幕胶囊: 宽 = 画布宽 × 0.729167、左右 padding 34px、字号 40px, 其中字号与
+// padding 再乘 --sub-scale = clamp(W/1920, 0.75, 1.25)。行宽(全宽字) = (0.729167·W − 2·34·s)/(40·s·emPer):
+// 中文 1080≈24 字、1920≈33 字、2560≈35 字 —— 2026-09-23 复核: 缩放带钳位, 按宽度线性外推是错的
+// (1.9.9 的 18×W/1080 在 1080 过报 27%、2560 漏报真折行)。emPer = 单字宽按 em 折算(中文全宽 1, 拉丁 ≈0.44)。
+export const SUB_GEOMETRY = { boxW: 0.729167, padPx: 34, fontPx: 40, baseW: 1920 };
+export const subScale = width => Math.min(1.25, Math.max(0.75, (width ?? SUB_GEOMETRY.baseW) / SUB_GEOMETRY.baseW));
+export function subLineCap(width, emPer = 1) {
+  const w = width ?? SUB_GEOMETRY.baseW;
+  const s = subScale(w);
+  return Math.max(8, Math.floor((SUB_GEOMETRY.boxW * w - 2 * SUB_GEOMETRY.padPx * s) / (SUB_GEOMETRY.fontPx * s * emPer)));
+}
+
 // ── CLI 入口守卫(单一来源) ───────────────────────────────────────────
-// "被 import 不跑主流程, 直接执行才跑" 的判定要稳健: 两侧都取 realpath —— 经符号链接调用时
-// argv[1] 是链接路径而 import.meta.url 是 real 路径, 纯字符串比较恒假 → 脚本静默 no-op
-// (exit 0 无输出; 2026-09-22 云沙箱实测, 排查花了 10 分钟)。同名文件当入口也算直接执行
-// (网络盘大小写/异形路径的残留情形) —— 宁可多跑一次主流程, 也不允许"静默不跑"这个形态。
+// "被 import 不跑主流程, 直接执行才跑" 的判定要稳健: 两侧都取 realpath —— 经符号链接/挂载点
+// 调用时 argv[1] 是调用路径而 import.meta.url 是归一后的路径, 纯字符串比较恒假 → 脚本静默
+// no-op(exit 0 无输出; 2026-09-22 云沙箱实测, 排查花了 10 分钟)。
 // 另注: `node -e "import('...')"` 走的是 import 语义, 不跑 main(设计如此) —— CLI 请 `node <脚本> ...`。
 export function isMainModule(metaUrl, entry = process.argv[1]) {
   if (!entry) return false;
-  const real = p => { try { return fs.realpathSync(path.resolve(p)); } catch { return path.resolve(p); } };
+  const realpathOf = p => { try { return fs.realpathSync(path.resolve(p)); } catch { return path.resolve(p); } };
   const meta = fileURLToPath(metaUrl);
   const eq = process.platform === 'win32'
     ? (a, b) => a.toLowerCase() === b.toLowerCase()
     : (a, b) => a === b;
-  if (eq(real(entry), real(meta))) return true;
-  return eq(path.basename(entry), path.basename(meta));
+  if (eq(realpathOf(entry), realpathOf(meta))) return true;
+  // 同名兜底: realpath 归一不了的**未知**路径形态按直接执行处理 —— 这是拿"带提示的多跑一次"
+  // 换"静默不跑"(后者实测烧掉 10 分钟)。命中必须大声宣告, 不许再静默; 误判方向(被同名入口
+  // import)本脚本随后也会响亮报错, 影响面只有 preview-page 一个消费者。
+  if (eq(path.basename(entry), path.basename(meta))) {
+    console.error(`⚠ 入口判定经同名兜底(realpath 未归一: ${entry} vs ${meta}) — 按直接执行处理`);
+    return true;
+  }
+  return false;
 }
 
 export const VALUE_FLAGS = new Set([

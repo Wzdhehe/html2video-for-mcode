@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { flagValue, loadPackage, positionalDir, requireFreshCss, safeId, safeOut, safeRel, subtitleKeyframes, subtitleWindows, validateScriptPaths, validateTimingsIds } from './tools.mjs';
+import { flagValue, loadPackage, positionalDir, requireFreshCss, safeId, safeOut, safeRel, SUB_GEOMETRY, subScale, subtitleKeyframes, subtitleWindows, validateScriptPaths, validateTimingsIds } from './tools.mjs';
 
 const argv = process.argv.slice(2);
 const dir = positionalDir(argv);
@@ -187,22 +187,22 @@ for (const s of slides) {
     w: script.width ?? 1920,
     h: script.height ?? 1080,
     // 字幕字号随画布宽度缩放, 竖版 (1080 宽) 收窄到 0.75 下限保证可读
-    subScale: Math.min(1.25, Math.max(0.75, (script.width ?? 1920) / 1920)),
+    subScale: subScale(script.width),   // 几何唯一来源 tools.subScale(clamp(W/1920, 0.75, 1.25))
   });
 
   // 字幕(默认开, --no-subs 关): 内容取自 timings.clauses(单一数据源, 不在 HTML 里重写),
   // 显示窗 = 该句开口 → 下句开口。做成百分比关键帧动画: 逐帧 seek 天然工作, still 模式 finish() 后自动隐藏。
   // 必须在 goto 之前 addInitScript 才会生效。
   if (SUBS && Array.isArray(t.clauses) && t.clauses.length) {
-    await page.addInitScript(({ clauses, durMs, css }) => {
+    await page.addInitScript(({ clauses, durMs, css, geom }) => {
       const mount = () => {
         const st = document.createElement('style');
         st.textContent = '.kit-sub{position:absolute;left:50%;bottom:calc(var(--stage-h, 1080px) * 0.077778);transform:translateX(-50%);'
-          + 'max-width:calc(var(--stage-w, 1920px) * 0.729167);'
+          + 'max-width:calc(var(--stage-w, 1920px) * ' + geom.boxW + ');'
           + 'background:var(--sub-bg, rgba(12,12,16,.62));color:var(--sub-fg, #fff);'
           + 'border:var(--sub-ring, 0 solid transparent);'
-          + 'font-size:calc(40px * var(--sub-scale, 1));line-height:1.5;'
-          + 'padding:calc(12px * var(--sub-scale, 1)) calc(34px * var(--sub-scale, 1));'
+          + 'font-size:calc(' + geom.fontPx + 'px * var(--sub-scale, 1));line-height:1.5;'
+          + 'padding:calc(12px * var(--sub-scale, 1)) calc(' + geom.padPx + 'px * var(--sub-scale, 1));'
           + 'border-radius:calc(14px * var(--sub-scale, 1));text-align:center;opacity:0;z-index:9;pointer-events:none;'
           + 'box-shadow:0 2px 12px rgba(0,0,0,.18)}'
           + '.kit-sub-2{font-size:.74em;opacity:.88;margin-top:6px;letter-spacing:.01em}' + css;
@@ -228,7 +228,7 @@ for (const s of slides) {
       };
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
       else mount();
-    }, { clauses: t.clauses, durMs: t.duration * 1000, css: subtitleKeyframes(t.clauses, t.duration) });
+    }, { clauses: t.clauses, durMs: t.duration * 1000, css: subtitleKeyframes(t.clauses, t.duration), geom: SUB_GEOMETRY });
 
     // 字幕窗口自检(与页面关键帧同一来源 tools.subtitleWindows): 任意时刻最多一条字幕可见。
     // 淡入/淡出都收在各自窗口内 —— 真正的重叠只有一种: 上一句窗口过短被 a+0.5 顶出(prevB > a)。

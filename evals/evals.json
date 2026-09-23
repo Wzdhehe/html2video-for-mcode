@@ -47,7 +47,7 @@
       "id": 6,
       "name": "subtitle-burn-and-srt",
       "prompt": "成片需要有字幕(很多人在静音场景看), 还要能传抖音/B站。字幕怎么加?",
-      "expected_output": "不需要在 HTML 里写字幕: capture 默认把 timings.json 的 clauses 逐句烧进画面(底部居中胶囊, 显示窗=该句开口到下句开口, --no-subs 可关), build-video 同时输出 out/subs.srt 供平台上传。单句建议 ≤18 字(plan-timings 超限会警告)。Gate 5 用静音播放验收字幕可读性。",
+      "expected_output": "不需要在 HTML 里写字幕: capture 默认把 timings.json 的 clauses 逐句烧进画面(底部居中胶囊, 显示窗=该句开口到下句开口, --no-subs 可关), build-video 同时输出 out/subs.srt 供平台上传。单句建议 ≤18 字(可读性惯例; 胶囊实际行宽 ≈24 字@1080 / ≈33 字@1920 —— 随画布缩放, plan-timings 折 3 行起才警告)。Gate 5 用静音播放验收字幕可读性。",
       "files": []
     },
     {

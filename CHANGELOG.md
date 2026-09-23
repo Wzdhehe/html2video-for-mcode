@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.10 — 2026-09-23
+
+**Round-21 review: subtitle line-width geometry corrected, and the 18-char rule's drift closed** (two-axis review of 1.9.9 found one hard inconsistency and one wrong baseline — both reproduced before fixing)
+
+- **Rule drift (hard):** 1.9.9 rewrote the subtitle wrap rule in `SKILL.md` and `references/authoring.md`, but three surfaces kept the old ">18 chars" rule — `references/render.md` ("A single sentence >18 chars … gets a warning from plan-timings"), `references/tts-and-timing.md` ("the single-line subtitle limit is 18 chars for Chinese / 42 characters for English") and `evals/evals.json` ("单句建议 ≤18 字"). All three now carry the width-aware rule (and `render.md` is a file 1.9.9 itself had edited — so this was a missed spot, not an untouched file).
+- **The 1080 baseline published in 1.9.9 was wrong** — correction to that entry: its "≈18 CJK chars per line at 1080, ≈32 at 1920" figures were a restatement of the superseded vertical baseline. The pill's font **and** padding both scale with `--sub-scale = clamp(W/1920, 0.75, 1.25)`, so per-line capacity is **not** linear in width: true values are ≈**24** CJK chars at 1080, ≈**33** at 1920, ≈**35** at 2560. The `18 × W/1080` estimate over-warned at 1080 by ~27% and — the dangerous direction — missed real three-line wraps at 2560 (estimated 42 vs true 35.6). All five doc surfaces now state the corrected numbers and separate the **craft guideline** (≈18 CJK / ≈42 English for one-liners) from the **pill capacity** the gate uses.
+- **Single source:** the pill geometry (box width 0.729167, side padding 34px, font 40px, the scale clamp) now lives once in `tools.SUB_GEOMETRY` / `subScale` / `subLineCap`; `plan-timings` derives the line cap from it and `capture` builds the `.kit-sub` CSS from the same constants — the two copies had already drifted (the review's Duplicated Code finding).
+- **Entry guard (same review):** the same-basename fallback now **announces itself on stderr** when it fires — the trade is "a loud, self-annotated extra run" against "a silent no-op" (the silent kind cost a 10-minute mystery in the field); its stated justification no longer claims cases `realpath` already covers. Also from the review's small items: the unused `fileURLToPath` import in `preview-page.mjs` is gone, the `real` helper is renamed `realpathOf`, and the guard's `!entry` branch is now actually covered (explicit `null` — passing `undefined` hits the default parameter and never reached it).
+- **Tests +1 (257 in fourteen files):** the geometry numbers are pinned (`subLineCap` = 24/33/35 CJK, 55 Latin; reverting to the linear formula turns it red), and the plan-timings case now exercises 2/3/4-line samples so the "three or more" predicate is tested at its exact boundary (the review noted the 1.9.9 title claimed a 3-line case it didn't run).
+
 ## 1.9.9 — 2026-09-22
 
 **Cloud-sandbox field batch: entry guard could silently no-op; subtitle wrap warning mis-fired** (report from a mavis-style web sandbox session, sorted by the reporter into skill issues vs environment quirks)

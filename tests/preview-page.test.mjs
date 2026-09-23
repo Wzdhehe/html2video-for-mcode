@@ -402,7 +402,7 @@ test('isMainModule: 入口判定稳健(符号链接/同名兜底/被 import 不�
   const meta = pathToFileURL(real).href;
   assert.equal(isMainModule(meta, real), true, '同一路径直接执行必须为真');
   assert.equal(isMainModule(meta, path.join(dir, 'other.mjs')), false, '别的脚本 import 时必须为假');
-  assert.equal(isMainModule(meta, undefined), false, '无入口(如 node -e "import()")为假 —— import 语义不跑 main 是设计');
+  assert.equal(isMainModule(meta, null), false, '无入口(如 node -e "import()")为假 —— 注意传 null: 传 undefined 会命中默认参数 process.argv[1], 测不到 !entry 分支');
   assert.equal(isMainModule(meta, path.join(dir, 'sub', 'probe.mjs')), true, '同名不同目录 = 直接执行兜底(宁可多跑, 拒绝静默)');
   const link = path.join(dir, 'link.mjs');
   try { fs.symlinkSync(real, link, 'file'); } catch { return t.skip('当前环境建不了文件符号链接(Windows 需开发者模式)'); }

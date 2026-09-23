@@ -6,16 +6,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { positionalDir, probeDuration, requireTool, safeId, safeOut, safeRel, validateScriptPaths } from './tools.mjs';
+import { positionalDir, probeDuration, requireTool, safeId, safeOut, safeRel, subLineCap, validateScriptPaths } from './tools.mjs';
 
 // 语种相关的计量基准。中文按"字", 英文按"字符"(含词间节奏, 与音节时长大致成正比)。
-// pacing = 每单位每秒的常见语速; subMax = 字幕单行建议上限; pace 区间用于语速异常预警。
+// pacing = 每单位每秒的常见语速; emPer = 单字宽按 em 折算(行宽估算用 —— 行宽公式在
+// tools.subLineCap, 字幕胶囊几何的唯一来源也在 tools.SUB_GEOMETRY); pace 区间用于语速异常预警。
 const LANG_CFG = {
-  zh: { unit: '字', pacing: 4.8, paceMin: 3, paceMax: 6.5, subMax: 18, word: null },
-  yue: { unit: '字', pacing: 4.8, paceMin: 3, paceMax: 6.5, subMax: 18, word: null },
-  en: { unit: '字符', pacing: 14, paceMin: 9, paceMax: 18, subMax: 42, word: 'words' },
+  zh: { unit: '字', pacing: 4.8, paceMin: 3, paceMax: 6.5, emPer: 1, word: null },
+  yue: { unit: '字', pacing: 4.8, paceMin: 3, paceMax: 6.5, emPer: 1, word: null },
+  en: { unit: '字符', pacing: 14, paceMin: 9, paceMax: 18, emPer: 0.44, word: 'words' },
 };
-const langCfg = code => LANG_CFG[code] ?? { unit: '字符', pacing: 14, paceMin: 8, paceMax: 20, subMax: 42, word: null };
+const langCfg = code => LANG_CFG[code] ?? { unit: '字符', pacing: 14, paceMin: 8, paceMax: 20, emPer: 0.44, word: null };
 
 const argv = process.argv.slice(2);
 const dir = positionalDir(argv);
@@ -84,10 +85,9 @@ for (const s of script.slides) {
   const stages = Object.keys(stageTime).map(Number);
   const last = stages.length ? Math.max(...stages) : 0;
   if (last > 0 && duration - (stageTime[last] ?? 0) < 1.2) warns.push(`${s.id}: 最后一个 stage 在 ${stageTime[last].toFixed(1)}s, 距收尾不足 1.2s — 观众看不清, 建议 tail 加大或精简口播`);
-  // 字幕行宽按画布宽度估: CFG.subMax 是 1080 宽下的单行基准(.kit-sub: max-width 72.9167% −
-  // 34px×2 padding, 字号 40px —— 1080 宽 ≈18 汉字/行, 1920 宽 ≈32)。折 2 行可读, 折 3 行起才警告
-  // (2026-09-22 云沙箱反馈: 横屏按 18 判"会换行"是误报, 且 2 行内不影响阅读)。
-  const subCap = Math.max(8, Math.floor(CFG.subMax * ((script.width ?? 1920) / 1080)));
+  // 字幕行宽来自 tools.subLineCap(胶囊几何唯一来源; 缩放带钳位, 按宽度线性外推是错的 ——
+  // 2026-09-23 复核: 中文 1080≈24 字/行、1920≈33、2560≈35)。折 2 行可读, 折 3 行起才警告。
+  const subCap = subLineCap(script.width ?? 1920, CFG.emPer);
   for (const c of clauses) {
     const n = charCount(c.text);
     const lines = Math.ceil(n / subCap);
