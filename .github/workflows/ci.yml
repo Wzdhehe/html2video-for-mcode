@@ -1,14 +1,17 @@
 # html2video-for-mcode · CI (Linux + Windows)
-# 本仓库根就是技能目录(fork 上的 scoped smoke workflow 要等宿主维护者批准才会首跑),
+# 仓库根是插件包根(skills/html2video-for-mcode/ 才是技能目录 —— marketplace 提交面, 2026-10-03 起),
+# 两个作业都 working-directory 到技能目录, 让 node_modules 落在 tests/ 旁边, 与旧"仓库根=技能目录"
+# 布局的发现几何完全一致。fork 上的 scoped smoke workflow 要等宿主维护者批准才会首跑,
 # 这里在自己的仓库里以同样的依赖组合(ffmpeg + Playwright Chromium, 两个平台各跑一遍)
 # 把 tests/ 下全部测试真实执行 —— 尤其是三条需要**文件符号链接**能力的 canary: Windows 无
 # 开发者模式时建不了文件链接, 本地一直只能跳过, Linux 与 Windows 管理员 runner 上是它们真正运行的场合。
 #
-# 依赖放置的坑(实测): 仓库根没有 package.json(技能目录不带 npm 清单), 而 npm 11 在
-# 无清单目录里 `npm install --no-save <pkg>` 会**静默不装**(exit 0, node_modules 为空)。
+# 依赖放置的坑(实测): 技能目录不带 package.json, 而 npm 11 在无清单目录里
+# `npm install --no-save <pkg>` 会**静默不装**(exit 0, node_modules 为空)。
 # 所以先 `npm init -y` 造临时清单 → 装(不落 lockfile) → 删清单。
 # ffmpeg 走系统包(choco/apt)让它在 PATH 上: 测试会把脚本放进临时项目目录当 cwd 跑,
-# 只有 PATH 发现对"任意 cwd"都成立(node_modules 发现依赖 cwd/上两层锚点, 深层布局会够不到)。
+# 只有 PATH 发现对"任意 cwd"都成立(node_modules 发现依赖 cwd/上两层锚点, 深层布局会够不到 ——
+# 脚本自身的 node_modules 发现走祖先链, 与 cwd 无关)。
 name: ci
 
 on:
@@ -19,6 +22,9 @@ on:
 
 permissions:
   contents: read
+
+env:
+  SKILL_DIR: skills/html2video-for-mcode
 
 jobs:
   linux:
@@ -38,6 +44,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
 
       - name: Install playwright (throwaway manifest, nothing committed)
+        working-directory: ${{ env.SKILL_DIR }}
         run: |
           npm init -y >/dev/null
           npm install --no-save --no-package-lock playwright
@@ -47,6 +54,7 @@ jobs:
       # glob 交给 shell 展开: 以后新增测试文件自动进 CI(旧枚举写法漏过 8 个文件)。
       # 单测超时 300s: 渲染冒烟里的 capture / build-video 在 CI 上要几十秒。
       - name: All tests (security · policy · css blocks · render smoke · symlink canaries)
+        working-directory: ${{ env.SKILL_DIR }}
         run: node --test --test-timeout=300000 tests/*.test.mjs
 
   windows:
@@ -69,6 +77,7 @@ jobs:
 
       - name: Install playwright (throwaway manifest, nothing committed)
         shell: bash
+        working-directory: ${{ env.SKILL_DIR }}
         run: |
           npm init -y >/dev/null
           npm install --no-save --no-package-lock playwright
@@ -77,4 +86,5 @@ jobs:
 
       - name: All tests (security · policy · css blocks · render smoke · symlink canaries)
         shell: bash
+        working-directory: ${{ env.SKILL_DIR }}
         run: node --test --test-timeout=300000 tests/*.test.mjs

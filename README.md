@@ -90,12 +90,20 @@ replacement), the generated-body template with its content fingerprint, and the 
 [MiniMax-Code-Plugins catalog](https://github.com/MiniMax-AI/MiniMax-Code-Plugins/tree/main/plugins/Wzdhehe/html2video-for-mcode) — that hosted
 directory is the publication unit, and the copy reviewed there is the one users get.
 
-**As a standalone skill (any AgentSkills host):** copy the reviewed skill directory **out of that
-hosted plugin** into your host's skills directory — not from any other source:
+**As a plugin (mcode marketplace):** this repository's root is itself a plugin package —
+`plugin.json` (the portable manifest the runtime reads), `.claude-plugin/plugin.json` (mcode 0.4+),
+and `.minimax-plugin/plugin.json` (the marketplace submission manifest, with the listing icon and
+category). It carries the same `skills/html2video-for-mcode/` subtree the hosted catalog reviews,
+kept byte-identical by the release tooling.
+
+**As a standalone skill (any AgentSkills host):** copy the skill directory out of that hosted
+plugin (or out of this repository — the same bytes) into your host's skills directory:
 
 ```bash
 # from a checkout of the MiniMax-Code-Plugins repository:
 cp -r plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode ~/.claude/skills/
+# or from a checkout of this repository (the same subtree):
+cp -r skills/html2video-for-mcode ~/.claude/skills/
 # project-level
 cp -r plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode <your-project>/.claude/skills/
 ```
@@ -227,8 +235,8 @@ The Skill ships an executable test suite (`skills/html2video-for-mcode/tests/`, 
 ```bash
 # in the MiniMax-Code-Plugins monorepo (the plugin PR context), from the repository root:
 node --test "plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode/tests/*.test.mjs"
-# in a standalone clone of this skill repo, from its root:
-node --test "tests/*.test.mjs"
+# in a standalone clone of this repository, from its root (the skill sits under skills/):
+node --test "skills/html2video-for-mcode/tests/*.test.mjs"
 ```
 
 285 tests in fifteen files: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
