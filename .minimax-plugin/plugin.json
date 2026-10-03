@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "name": "html2video-for-mcode",
   "displayName": "HTML 2 Video for mcode",
-  "version": "1.9.14",
+  "version": "1.9.15",
   "description": "Turn a topic, outline, or script into a narrated MP4: HTML slides with staged entrance animations, a TTS voiceover, burned-in subtitles, ffmpeg assembly, and an ASR pass that verifies the voiceover. / 把主题、大纲或文稿做成一条带口播的 MP4:HTML 幻灯片分步入场动画、TTS 配音、内嵌字幕、ffmpeg 合成,外加 ASR 反向校验口播与文稿一致。",
   "author": "Wzdhehe",
   "icon": "icon.png",
