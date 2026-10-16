@@ -61,7 +61,7 @@ if (idsFilter) {
 
 const playwright = await loadPackage('playwright', { projectDir: dir });
 if (!playwright) {
-  console.error('✗ 未找到 playwright(已按 项目目录 / 调用目录 / npm 全局 逐个找过)。在项目目录执行:\n  npm i playwright\n  npx playwright install chromium');
+  console.error('✗ 未找到 playwright(已按 项目目录 / 调用目录 / npm 全局 逐个找过)。在项目目录执行:\n  npm i --save-exact playwright@1.63.0\n  npx --no-install playwright install chromium');
   process.exit(1);
 }
 

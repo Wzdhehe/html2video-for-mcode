@@ -32,8 +32,18 @@ describe('assertAsrEndpoint(纯函数)', () => {
 });
 
 describe('asr.mjs 进程级行为', () => {
+  for (const args of [['--api-key', 'fake-cli-secret'], ['--api-key=fake-cli-secret']]) {
+    test(`reject command-line credentials (${args.length === 1 ? 'equals' : 'separate'} syntax) without echoing the key`, () => {
+      const r = runSkill('asr.mjs', [...args, '--provider', 'api', '--file', 'missing.mp3'],
+        { env: { ...process.env, MINIMAX_API_KEY: '' } });
+      assert.equal(r.status, 1);
+      assert.match(r.stderr + r.stdout, /MINIMAX_API_KEY/);
+      assert.doesNotMatch(r.stderr + r.stdout, /fake-cli-secret/);
+    });
+  }
+
   test('MINIMAX_BASE_URL=第三方域 + 假 Key → 退出 1, 不发起请求(与提供方无关: 端点闸门在提供方解析之前)', () => {
-    const r = runSkill('asr.mjs', ['--api-key', 'sk-test-not-real', '--base-url', 'https://evil.example', '--file', 'whatever.mp3']);
+    const r = runSkill('asr.mjs', ['--base-url', 'https://evil.example', '--file', 'whatever.mp3'], { env: { ...process.env, MINIMAX_API_KEY: 'sk-test-not-real' } });
     assert.notEqual(r.status, 0);
     assert.ok((r.stderr + r.stdout).includes('端点'), '应说明端点被拒');
   });
@@ -60,8 +70,8 @@ describe('asr.mjs 进程级行为', () => {
     try {
       // 必须 runSkillAsync: spawnSync 冻结事件循环, 本地服务器 accept 不了子进程请求 → 互等死锁
       // --provider api 显式定向: 本机装了 mmx ≥1.0.26 时自动解析会走 mmx, 绕开这台桩服务器
-      const r = await runSkillAsync('asr.mjs', ['--provider', 'api', '--api-key', 'sk-test-not-real', '--allow-any-endpoint',
-        '--base-url', `http://127.0.0.1:${port}`, '--file', mp3]);
+      const r = await runSkillAsync('asr.mjs', ['--provider', 'api', '--allow-any-endpoint',
+        '--base-url', `http://127.0.0.1:${port}`, '--file', mp3], { env: { ...process.env, MINIMAX_API_KEY: 'sk-test-not-real' } });
       assert.equal(sawAuth, 'Bearer sk-test-not-real', '本地服务器应收到 Bearer 假 Key');
       // 脚本本身成功与否不强断言(响应是假 JSON); 关键证据是 sawAuth
       assert.ok(r.status === 0 || (r.stdout + r.stderr).length > 0);
@@ -84,7 +94,7 @@ describe('asr.mjs 提供方选择(mmx cli ≥1.0.26 缺省首选, REST 为显式
     const r = runSkill('asr.mjs', ['--provider', 'api', '--file', 'x.mp3'], { env: { ...process.env, MINIMAX_API_KEY: '' } });
     assert.equal(r.status, 2);
     const out = r.stderr + r.stdout;
-    assert.match(out, /mmx-cli@latest/, '引导应包含升级/安装 mmx');
+    assert.match(out, /mmx-cli@1\.0\.26/, '引导应包含升级/安装 mmx');
     assert.match(out, /MINIMAX_API_KEY/, '引导应包含 REST 后备的 Key 配法');
   });
 
@@ -164,6 +174,6 @@ describe('asr.mjs 提供方选择(mmx cli ≥1.0.26 缺省首选, REST 为显式
     const out = r.stdout + r.stderr;
     assert.match(out, /mmx speech transcribe 失败/, '应点名提供方与命令');
     assert.match(out, /boom-quota/, '应透出 mmx 的 stderr');
-    assert.match(out, /mmx-cli@latest/, '应给出升级提示');
+    assert.match(out, /mmx-cli@1\.0\.26/, '应给出锁定版本的升级提示');
   });
 });

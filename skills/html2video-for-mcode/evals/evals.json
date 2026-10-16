@@ -40,7 +40,7 @@
       "id": 5,
       "name": "asset-gate-browser-route",
       "prompt": "做一条介绍某中国 AI 公司的视频, 需要他们的 logo、CEO 照片和产品截图。素材这块你怎么弄?",
-      "expected_output": "按优先级执行: 官方渠道(brand kit/simple-icons/官方文档截图)优先; 缺的用内置浏览器或 Playwright 打开官网 inspect DOM 提取官方 CDN 资源(2026-09 实测中国 AI 公司 6/6 相关); image-downloader(Bing)默认不用(中文题材实测系统性返回无关图); 每个素材查合规(水印/商标语境/照片授权/截图出处), 落盘 assets/ 并逐条登记 MANIFEST.md; 素材清单+预览过 Gate 3, 明确问用户来源与授权是否 OK, 过了才写 HTML。禁止凭空造图; 无合适素材降级纯排版。",
+      "expected_output": "默认纯排版与 CSS/SVG 图表。用户明确选择外部素材时，下载前先确认每份素材用于本次用途的授权；CEO 肖像还需确认相应肖像使用许可。官方来源或用户提供不自动等于授权。确认后才从 brand kit、官网或单独许可来源获取；逐条在 MANIFEST 记录来源、许可/授权证据、署名要求、用户确认。Gate 3 确认最终选择后写 HTML。授权不明则用文字引语/图表，不自动抓新闻图片、报道截图或真人肖像，不以概括性法律豁免代替授权。",
       "files": []
     },
     {
@@ -75,7 +75,7 @@
       "id": 10,
       "name": "image-sourcing-sop",
       "prompt": "配一张学校大门的实景图, 搜到的图主体都在画面边缘或者只有半截, 比例也不对。怎么办?",
-      "expected_output": "按 references/image-sources.md 的 SOP: 核心原则是'先重搜全貌图, 别硬裁硬用'。query 加正向词(全景/全貌/正面/远景)排除词(特写/近景/一角/半截); 下载前缩略图筛(主体居中/比例接近/无水印无无关logo/≥1200px), 不合适就换; 拿到图跑 prep-image.mjs --check; 图片一律套 .img-frame, 用 --img-pos 控制主体可见区或 .contain 留白, 不要裸放 img 或硬裁(裁切硬限: 裁掉≤20%、不放大补边); 都不行就换题材(数字卡/大字/引言)。",
+      "expected_output": "先由用户确认本次用途的素材授权，再按 references/image-sources.md 检查构图：优先找全貌图，检查主体、比例、清晰度；用 prep-image --check 校验，套 img-frame/contain 控制展示，裁切不超过20%，不得裁掉水印或署名来绕过限制；授权不明或构图不合适则退回纯排版。",
       "files": []
     },
     {
@@ -96,14 +96,14 @@
       "id": 13,
       "name": "non-mcode-environment-via-mmx",
       "prompt": "我在 Claude Code 里, 没有 mcode 的 connector。这个技能还能跑吗? TTS 和 ASR 怎么办?",
-      "expected_output": "能跑 —— 脚本层(截图/渲染/合成/校验/配图)完全环境无关, 只有 TTS/音乐/ASR 依赖平台。TTS 用 mmx-cli: mmx speech synthesize --text ... --voice <id> --speed 1.1 --out audio/01.mp3(音色 mmx speech voices); ASR 用技能自带 node scripts/asr.mjs <项目>(同一把 API Key 直调 /v1/speech_to_text, 自动比对 checklist, 数字/繁体字不符判 ✗); 音乐生成 mmx-cli 没有 → 用户自备或跳过; 配图可用 mmx image(仅限抽象图, 禁生成 logo/截图/真人头像)。首次配置 npm i -g mmx-cli + mmx auth login, 401 时设 region。纪律不变: 时长实测、字幕来自 clauses、音色要试听验语种、Gate 不跳。",
+      "expected_output": "能跑 —— 脚本层(截图/渲染/合成/校验/配图)完全环境无关, 只有 TTS/音乐/ASR 依赖平台。TTS 用 mmx-cli: mmx speech synthesize --text ... --voice <id> --speed 1.1 --out audio/01.mp3(音色 mmx speech voices); ASR 用技能自带 node scripts/asr.mjs <项目>(默认复用 mmx 登录转写；REST 后备只读环境变量 MINIMAX_API_KEY，自动比对 checklist，数字/繁体字不符判 ✗); 音乐生成 mmx-cli 没有 → 用户自备或跳过; 配图可用 mmx image(仅限抽象图, 禁生成 logo/截图/真人头像)。优先复用已有 mmx 登录；如需安装或升级，说明全局影响并取得用户明确同意后才 npm i -g mmx-cli@1.0.26，随后由用户本机 mmx auth login；禁止把 Key 放进命令参数或聊天, 401 时设 region。纪律不变: 时长实测、字幕来自 clauses、音色要试听验语种、Gate 不跳。",
       "files": []
     },
     {
       "id": 14,
       "name": "asr-rest-and-timing-verify",
       "prompt": "ASR 校验怎么跑? 我想顺便确认动画到底有没有对上口播。",
-      "expected_output": "build-video --asr 先按句切出 asr/part-<id>-<k>.mp3; 然后 MINIMAX_API_KEY=sk-xxx node scripts/asr.mjs <项目> 直调 REST 转写, 自动与 checklist 预期文本比对并回填(数字/繁体字不符 → ✗ 非 0 退出; 超 500s/50MB 自动转码)。要确认对轴: node scripts/asr.mjs <项目> --verify-timing 用接口的字级时间戳(verbose_json + timestamp_level=word)实测每句开口, 与 timings.json 的 clauses[].start 对比; 偏差大就校准后重渲染。也可先用 check-timing.mjs(静音法, 离线免费)。",
+      "expected_output": "build-video --asr 先按句切出 asr/part-<id>-<k>.mp3; 然后使用已有 mmx 登录运行 node scripts/asr.mjs <项目>；REST 后备需先通过环境提供 MINIMAX_API_KEY，再加 --provider api；禁止 --api-key 或 --api-key= 参数，禁止将 Key 放进聊天或项目文件。转写后, 自动与 checklist 预期文本比对并回填(数字/繁体字不符 → ✗ 非 0 退出; 超 500s/50MB 自动转码)。要确认对轴: node scripts/asr.mjs <项目> --verify-timing 用接口的字级时间戳(verbose_json + timestamp_level=word)实测每句开口, 与 timings.json 的 clauses[].start 对比; 偏差大就校准后重渲染。也可先用 check-timing.mjs(静音法, 离线免费)。",
       "files": []
     },
     {
