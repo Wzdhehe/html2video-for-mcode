@@ -148,7 +148,7 @@ if (URLS.length) {
 }
 
 const playwright = await loadPackage('playwright', { projectDir: process.cwd() });
-if (!playwright) { console.error('✗ 未找到 playwright(已按 项目目录 / 调用目录 / npm 全局 逐个找过)。先执行: npm i playwright && npx playwright install chromium'); process.exit(1); }
+if (!playwright) { console.error('✗ 未找到 playwright(已按 项目目录 / 调用目录 / npm 全局 逐个找过)。先执行: npm i --save-exact playwright@1.63.0 && npx --no-install playwright install chromium'); process.exit(1); }
 
 // 浏览器全部出网收进本地否决代理(2026-09-25 六审 blocker 1): Chromium 自己解析 DNS,
 // 注入不了 lookup —— 只有把页面导航/Chromium 跟随的重定向/全部子资源收进隧道, 上游建连

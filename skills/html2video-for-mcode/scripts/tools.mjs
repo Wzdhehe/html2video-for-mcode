@@ -71,7 +71,7 @@ export function requireTool(name, projectDir) {
     console.error([
       `✗ 找不到 ${name}。按顺序排查:`,
       `  1. 系统 PATH 上没有 ${name}`,
-      `  2. 项目/仓库 node_modules 里没有 (试试: npm i ffmpeg-static ffprobe-static)`,
+      `  2. 项目/仓库 node_modules 里没有 (试试: npm i --save-exact ffmpeg-static@5.3.0 ffprobe-static@3.1.0)`,
       `  3. 常见安装位置 (winget Links / scoop / C:\\ffmpeg\\bin) 也没有`,
       `  最快解法: winget install Gyan.FFmpeg (Windows) · brew install ffmpeg (macOS) · apt install ffmpeg (Linux)`,
     ].join('\n'));

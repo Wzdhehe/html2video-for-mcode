@@ -12,7 +12,7 @@
 // 提供方: --provider mmx|api 显式指定; 缺省时 PATH 上有 mmx ≥1.0.26 就走 mmx, 否则走 api。
 //   mmx 路径: 输入音频按原路径**只读**交给 CLI; 转写输出先落 os.tmpdir() 专属中转文件, 再由本脚本
 //   写进受监路径(CLI 拿不到任何写回路径), 且子进程环境里剥掉 MINIMAX_API_KEY/MINIMAX_BASE_URL。
-//   api 路径 Key 来源(按序): --api-key sk-xxx → 环境变量 MINIMAX_API_KEY
+//   api 路径 Key 仅从环境变量 MINIMAX_API_KEY 读取; 不接受命令行 Key。
 //   api 区域(按序): --base-url → 环境变量 MINIMAX_BASE_URL → MINIMAX_REGION(cn=api.minimaxi.com / global=api.minimax.io)
 // 端点安全(仅 api 路径发 Key): Key 只发上面两个官方域; 其他 --base-url/MINIMAX_BASE_URL 一律拒绝, 自建网关需显式 --allow-any-endpoint。
 // 接口约束(官方文档, 两路径同一后端同一约束): wav/aiff/flac/m4a/mp3/aac/opus/ogg; 时长 ≤500s; 大小 ≤50MB。
@@ -25,13 +25,17 @@ import { flagValue, positionals, probeDuration, requireTool, safeId, safeOut, st
 import { assertAsrEndpoint, PolicyError } from './url-policy.mjs';
 
 const argv = process.argv.slice(2);
+if (argv.some(a => a === '--api-key' || a.startsWith('--api-key='))) {
+  console.error('✗ 不接受命令行 Key。请通过环境变量 MINIMAX_API_KEY 或已有 mmx auth login 登录提供凭据。');
+  process.exit(1);
+}
 // 位置参数与取值型 flag 的清单统一在 tools.mjs(单一来源): 每个脚本自己维护一份就会漂
 // (2026-09-18 复查: 三个脚本各有一份, 而 tools 那份还误把布尔开关当取值型)
 const positional = positionals(argv);
 // 项目目录要早定义: --file 单文件模式在上面就分流了, 而工具发现(requireTool)要用它
 const dir = path.resolve(positional[0] ?? '.');
 
-const KEY = flagValue(argv, '--api-key') || process.env.MINIMAX_API_KEY || '';
+const KEY = process.env.MINIMAX_API_KEY || '';
 const REGION = process.env.MINIMAX_REGION || 'cn';
 // 端点白名单: API Key 只发官方 MiniMax 域; 换端点必须显式 --allow-any-endpoint(危险项)。
 // 防的是环境变量/提示词把 MINIMAX_BASE_URL 偷换成收集器后凭证外发。
@@ -97,7 +101,7 @@ const mmxUsable = () => {
 };
 const USE_MMX = PROVIDER === 'mmx' ? true : (!PROVIDER && mmxUsable());
 if (PROVIDER === 'mmx' && !mmxUsable()) {
-  console.error('✗ --provider mmx 但 PATH 上的 mmx 没有 speech transcribe(要 ≥1.0.26): npm i -g mmx-cli@latest\n  (或改用 --provider api + MINIMAX_API_KEY 直连 REST)');
+  console.error('✗ --provider mmx 但 PATH 上的 mmx 没有 speech transcribe(要 ≥1.0.26): 经用户明确同意后 npm i -g mmx-cli@1.0.26\n  (或改用 --provider api + MINIMAX_API_KEY 直连 REST)');
   process.exit(1);
 }
 
@@ -118,8 +122,8 @@ const fromLookup = name => {
 if (!USE_MMX && !KEY && !FROM) {
   console.error([
     '✗ ASR 两条路径都没就绪, 二选一:',
-    '  1) mmx cli(≥1.0.26, 推荐, 与 TTS 同一套登录): npm i -g mmx-cli@latest && mmx auth login --api-key sk-xxx',
-    '  2) 直连 REST(后备): export MINIMAX_API_KEY=sk-xxx 或 node asr.mjs <项目> --api-key sk-xxx',
+    '  1) mmx cli(≥1.0.26, 推荐, 与 TTS 同一套登录): 经用户明确同意后 npm i -g mmx-cli@1.0.26; 用户在本机运行 mmx auth login',
+    '  2) 直连 REST(后备): 通过环境变量 MINIMAX_API_KEY 提供 Key, 不要放进命令参数或聊天',
     '     海外套餐加 MINIMAX_REGION=global(或 --base-url https://api.minimax.io)',
     '  查额度与身份: mmx quota / mmx auth status',
   ].join('\n'));
@@ -157,7 +161,7 @@ async function transcribe(file, { format = FORMAT, ts = TS, language = LANG } = 
         const r = mmxRun(args, { timeout: 180000 });
         if (r.error || r.status !== 0) {
           const t = String((r.stderr || '') + (r.stdout || '')).trim();
-          throw new Error(`mmx speech transcribe 失败${r.error ? `(${r.error.code || r.error.message})` : `(exit ${r.status})`}: ${t.slice(0, 300)}\n  → 检查 mmx auth login / 网络; 老版本没有该子命令: npm i -g mmx-cli@latest(≥1.0.26)`);
+          throw new Error(`mmx speech transcribe 失败${r.error ? `(${r.error.code || r.error.message})` : `(exit ${r.status})`}: ${t.slice(0, 300)}\n  → 检查 mmx auth login / 网络; 老版本没有该子命令: 经用户明确同意后 npm i -g mmx-cli@1.0.26(≥1.0.26)`);
         }
         if (!fs.existsSync(doc) || !fs.statSync(doc).size) throw new Error('mmx speech transcribe 没有产出结果文件(--out)');
         const raw = fs.readFileSync(doc, 'utf8');

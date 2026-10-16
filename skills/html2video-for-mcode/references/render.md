@@ -169,7 +169,7 @@ Before build-video ends it enforces: the final video's ffprobe duration differs 
 | Font ugly first, then correct (FOUT) | External font + font waiting not going through capture | Localize assets/fonts; make sure you use capture.mjs rather than manual screenshots |
 | Animation not in the video | Used still mode | Re-run that slide with `--mode motion` |
 | Animation layer timing wrong | Animation delays hand-written in the HTML | Delete them, rely on --t1/--t2/--t3 injection |
-| chromium fails to launch | Browser not installed | `npx playwright install chromium` (on Linux CI add `--with-deps`) |
+| chromium fails to launch | Browser not installed | `npx --no-install playwright install chromium` (on Linux CI add `--with-deps`) |
 | A slide's segment length is wrong | Frame directory is from old timings | Delete `build/frames/<id>/` and re-run capture; after changing TTS you must re-run plan-timings |
 | Backslash paths break concat on Windows | — | build-video already converts to forward slashes; be careful when hand-assembling list.txt |
 | Some elements enter at 0s, others on time | Old tokens.css: delays overridden by the `.fx-*` shorthands | Switch to the new tokens.css (`--fx-delay`); see authoring.md for the implementation principle |
@@ -182,6 +182,6 @@ Before build-video ends it enforces: the final video's ffprobe duration differs 
 ## Environment differences notes
 
 - **ffmpeg/ffprobe detection**: every script uniformly goes PATH → project/repo node_modules (ffmpeg-static/ffprobe-static) → common install locations (winget Links / scoop / C:\ffmpeg\bin); when not found they list the checks one by one and exit with code 2 (distinct from 1 for business errors).
-- **Windows**: `python`/`node` naming, path separators — this whole suite is implemented in Node, no bash arrays, no octal traps, it just runs. ffmpeg: `winget install Gyan.FFmpeg` or `npm i ffmpeg-static ffprobe-static`.
-- **Linux sandbox (mcode)**: chromium is installed by `npx playwright install chromium`; a Chinese font package is needed; `--with-deps` supplies shared libraries.
+- **Windows**: `python`/`node` naming, path separators — this whole suite is implemented in Node, no bash arrays, no octal traps, it just runs. ffmpeg: `winget install Gyan.FFmpeg` or `npm i --save-exact ffmpeg-static@5.3.0 ffprobe-static@3.1.0`.
+- **Linux sandbox (mcode)**: chromium is installed by `npx --no-install playwright install chromium`; a Chinese font package is needed; `--with-deps` supplies shared libraries.
 - Supersampling: capture `--dsf 2` emits 3840×2160 frames, and build-video detects the size mismatch and auto-downsamples with lanczos, giving sharper text edges; render time is about ×4, so use it only for the final master. `--dsf` accepts 1–4 and **defaults to 1**; anything else (0, 2.5, `abc`) is rejected at the entry point with a clear message.

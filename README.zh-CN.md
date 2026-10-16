@@ -38,7 +38,7 @@ my-video/
 | 3. 脚本 | 每张 slide 的口播拆成逐句 clauses;每张至少两个信息层、分属不同动画 stage(先后顺序自由) |
 | 4. TTS | 配音合成(mcode connector,其他环境用 `mmx-cli`),随后用 ffprobe 实测每段时长 |
 | 5. 对时 | 每张时长、每层入场时刻**全部由实测音频推出**,不手写任何秒数 |
-| 6. 配图 | 官方素材优先、图片框原语、合规清单登记 |
+| 6. 配图 | 用户确认授权的素材、图片框原语、授权清单登记 |
 | 7. HTML | 分步入场动画绑定实测时刻;17 种版式配方 |
 | 8. 渲染 | 确定性逐帧步进捕获(动画真正进视频)、ffmpeg 合成与字幕、可选 BGM。真正编码前先用 `preview-page.mjs` 出的放映页在浏览器里过一遍 |
 | 9. 校验 | ASR 转写与脚本比对;对比度、主题、渲染前静态闸门 |
@@ -54,39 +54,43 @@ my-video/
 
 ## 安装
 
-**作为插件(MiniMax Code)**:从 [MiniMax-Code-Plugins 目录](https://github.com/MiniMax-AI/MiniMax-Code-Plugins/tree/main/plugins/Wzdhehe/html2video-for-mcode)安装
-`plugins/Wzdhehe/html2video-for-mcode` —— 宿主目录就是发布单元,评审过的那份才是用户拿到的。
+**来源与归属**：这是由 Wzdhehe 独立维护的社区插件，并非 MiniMax 官方插件。
+真实源码与市场提交包位于 [Wzdhehe/html2video-for-mcode](https://github.com/Wzdhehe/html2video-for-mcode)。
+仓库根包含 `plugin.json`、`.claude-plugin/plugin.json`、`.minimax-plugin/plugin.json`
+及 `skills/html2video-for-mcode/`。市场是否上架以审核结果为准，本仓库不代表已获审核通过。
 
-**作为插件(mcode 插件市场)**:本仓库根本身就是一个插件包 —— `plugin.json`(可移植清单,运行时读它)、
-`.claude-plugin/plugin.json`(mcode 0.4+)、`.minimax-plugin/plugin.json`(市场提交清单,含图标与类目);
-`skills/html2video-for-mcode/` 子树与宿主目录评审的那份逐字节一致(由发布工具同步保证)。
-
-**作为独立技能(任意 AgentSkills 宿主)**:从宿主插件目录(或本仓库 —— 同一份字节)复制技能目录:
+**作为独立技能（任意 AgentSkills 宿主）**：从本仓库检出后复制：
 
 ```bash
-# 从 MiniMax-Code-Plugins 仓库的检出:
-cp -r plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode ~/.claude/skills/
-# 或从本仓库的检出(同一份子树):
 cp -r skills/html2video-for-mcode ~/.claude/skills/
 # 项目级安装
-cp -r plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode <你的项目>/.claude/skills/
+cp -r skills/html2video-for-mcode <你的项目>/.claude/skills/
 ```
 
 然后把两个依赖装到**你的视频项目里**(不是技能目录里):
 
 ```bash
 cd <你的视频项目>
-npm i playwright && npx playwright install chromium
+npm i --save-exact playwright@1.63.0 && npx --no-install playwright install chromium
 # ffmpeg: winget install Gyan.FFmpeg / brew install ffmpeg / apt install ffmpeg
-#         或: npm i ffmpeg-static ffprobe-static
+#         或: npm i --save-exact ffmpeg-static@5.3.0 ffprobe-static@3.1.0
 ```
+
+**安装与凭据**：优先在视频项目内安装，保留生成的 `package-lock.json`，后续使用 `npm ci`。
+所有 npm 安装示例均锁定精确版本。全局安装或升级前，必须说明包名、版本及系统范围影响，
+并取得用户明确同意；仅在同意后才可执行 `npm install -g mmx-cli@1.0.26`。
+Key 仅通过环境变量 `MINIMAX_API_KEY` 或已有 `mmx auth login` 登录提供，禁止放进聊天、命令参数或项目文件。
+
+**素材授权**：默认使用纯排版及 CSS/SVG 图表，不默认抓取新闻图片、报道截图或真人肖像。
+下载或使用任何外部素材前，须由用户确认具备用于本次用途的授权，并在 `assets/MANIFEST.md`
+记录来源、许可或授权证据、署名要求和用户确认。官方来源或用户提供均不自动代表可再利用；授权不明则使用纯排版。
 
 ## 依赖要求
 
-- **Node.js 18+**(纯 ESM,无构建步骤)。
+- **Node.js 20+**(纯 ESM,无构建步骤)。
 - **ffmpeg / ffprobe**:在 `PATH` 上,或项目里装 `ffmpeg-static` / `ffprobe-static`。脚本按 `PATH → 项目 node_modules → 技能上两级 → 常见安装位置` 探测。
 - **Playwright Chromium**:截图用。装在视频项目里即可 —— 脚本会从项目目录、工作目录、npm 全局逐个解析。
-- **配音**:三选一 —— mcode 平台 connector、`mmx-cli`(`npm i -g mmx-cli && mmx auth login --api-key sk-...`)、或你自己的 TTS(把音频写到 `audio/<id>.mp3`)。mcode connector 与 `mmx-cli`/REST 消耗的都是 **MiniMax 账号的付费配额** —— 该账号是必需的计费服务,按字数/时长计费。
+- **配音**:三选一 —— mcode 平台 connector、`mmx-cli`（使用已有的 `mmx auth login` 登录）、或你自己的 TTS(把音频写到 `audio/<id>.mp3`)。mcode connector 与 `mmx-cli`/REST 消耗的都是 **MiniMax 账号的付费配额** —— 该账号是必需的计费服务,按字数/时长计费。
 - **反向 ASR 校验**:`scripts/asr.mjs` 把配音转写回来与脚本比对(数字、专名、语种)。默认走 `mmx speech transcribe`(mmx-cli ≥ 1.0.26,与配音同一套 mmx 登录,不需要另行配 Key);没有 mmx-cli 时用 `--provider api` + `MINIMAX_API_KEY` 直连 REST。两条路径消耗的都是同一个**付费、按配额计费的 MiniMax 账号**,每次转写按音频时长计费。
 
 ## 快速开始
@@ -137,21 +141,21 @@ Windows / macOS / Linux。脚本全部是 Node ESM,不依赖特定 shell。Windo
 - 抓取的素材下载到项目的 `assets/` 目录,并需在 `assets/MANIFEST.md` 登记来源与许可。
 - **写入只发生在你传入的项目目录内。** `script.json` 派生出的每个路径(slide 的 `id` / `html` / `audio`、`bgm.file`)都先过校验:id 必须匹配 `^[A-Za-z0-9_-]{1,64}$`,路径必须 resolve 在项目目录内,符号链接逃逸同样拒绝 —— 手改或被注入的 `script.json` 无法让流水线读写或递归删除项目目录之外的东西。**唯一声明过的例外**:`prep-image.mjs --crop` 的输入与输出都由命令行**显式给出**(与你直接跑 ffmpeg 同一信任级),这两个路径不限于项目内 —— 覆盖已存在输出仍需 `--force`。所有**派生**路径的流水线写入(项目 + id、`preview/`、`build/`、`out/`、`asr.mjs --out`)都完整收监。
 - **不会静默覆盖任何东西。** `init-project.mjs` 对非空目标目录直接拒绝(重新初始化需 `--force`,且只重置它自己生成的 5 个文件);`fetch-official-images.mjs` 与 `prep-image.mjs` 覆盖已存在文件需 `--force`,下载默认收在工作目录内。`--upgrade-css` 更新 tokens.css 里**唯一的 tokens 受管区**(技能生成的整段主体:主题令牌 / `--fs-*` 字号 / fx 关键帧与工具类 / `.fx-stagger`,三个工具箱子块嵌在其中)时按 rev 原地替换。区外还留着的旧副本**按条清理**:逐字来自模块原文的规则会被删掉(它们在层叠上会压过受管区),你自己的规则(包括紧挨副本的一两条覆写)保留并报出;写前先备份 `tokens.css.bak`。你自己的规则要写在**受管区之后**,否则受管区的值优先。`--check-css` 只查不改。
-- **不存储、不内嵌任何凭据**:默认 mmx 提供方下脚本完全不接触 Key(mmx 自己持有登录);`--provider api` 路径运行时从 `MINIMAX_API_KEY` 或 `--api-key` 读取,且从不写出到任何文件。
+- **不存储、不内嵌任何凭据**:默认 mmx 提供方下脚本完全不接触 Key(mmx 自己持有登录);`--provider api` 路径运行时从 环境变量 `MINIMAX_API_KEY` 读取（拒绝命令行 Key）,且从不写出到任何文件。
 - `KIT_PROJECT_DIR` 是内部变量,由 CLI 入口自动设置,让共用助手能定位项目目录;用户永远不需要自己设置。
+
+仓库开发环境请在仓库根运行 `npm ci --ignore-scripts`；CI 同样使用已提交的锁文件。
 
 ## 验证
 
 技能自带可执行测试(`skills/html2video-for-mcode/tests/`,纯 `node:test`,无额外依赖):
 
 ```bash
-# MiniMax-Code-Plugins monorepo(插件 PR 语境), 在仓库根执行:
-node --test "plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode/tests/*.test.mjs"
 # 本仓库的独立 clone, 在仓库根执行(技能在 skills/ 子目录下):
 node --test "skills/html2video-for-mcode/tests/*.test.mjs"
 ```
 
-十五个文件共 285 例:`safe-paths`(恶意 slide id / 路径、canary 完好性、符号链接逃逸 —— 含**悬空**链接必须被拦下,而不是当"不存在"跳过)、`no-clobber`(覆盖拒绝)、`endpoint-allowlist`(Key 不离开官方域,并用本地服务器证明闸门在请求之前;外加提供方选择:`mmx speech transcribe` 缺省与 `--provider api` 后备,mmx shim 集成对断言参数映射与临时目录中转/清理)、`fetch-policy`(SSRF、`file://`、重定向与文件名规则、**IPv4-mapped IPv6 十六进制形式**)、`connect-binding`(DNS 失败即拒(fail-closed),SSRF 否决挂到**建连那次** lookup —— 出网走 `policyGet`、浏览器流量走本地否决代理;rebinding 用例以"目标收到 **0 个请求**"为判据)、`preview-page`(快照注入实测延迟、`base` 顺序、自包含无外链、越界拒绝、无计时器、**竖版画布、iframe 强制相对解析**)、`tokens-fx`(模板里每个入场动画的关键帧必须声明 `opacity`、`no-fx` 必须重置基础态、`--upgrade-css` 幂等)、`chart-kit`(模板里真带着图表工具箱:keyframes / 注册属性 /「关动效 = 终态」不变量)、`table-kit`(表格原语的可读性硬指标:正文号、行高 ≥72px、涨跌走令牌、矩阵高亮列覆盖表头)、`css-kit`(**整段受管区**:陈旧 / 缺失 / 重复 / 定界符被改坏 / 区外还留着旧副本, 五种都要检出并原地修好 —— 区外副本会在层叠上压过受管区, 这正是本轮重写的起因; 项目端覆写按条保留、老格式裸文本原地包裹而不重复、`--check-css` 退出码、CRLF 不误报、病态互踩一次到位、超大输入拒绝 —— 外加复查在新机制自己身上揪出的两个假绿灯: 受管区是最新的、但区外还留着一份**主体副本**时以前报 `ok`(现在按主体形状识别并报 `legacy-outside`); 项目覆写的 `ok` 提示会点名它**在受管区之前还是之后**(之前则层叠上输, 之后才赢))与 `render-smoke`(init → 对时 → 静态闸门 → 截图 → 成片全链,**still 复截后静态回退必须点名警告**,外加**升级前后画面真的变了的像素级证明**), 以及 capture 的布局几何自检(溢出/顶部被裁点名数字)与骨架 safe center 契约。`review-round2`(输出收监 canary:项目内符号链接不得写到项目外;本地服务器证明被拒目标收到 0 个请求;单引号属性;ASR 请求失败必须计入失败;项目内 ffmpeg 发现)与 `cover-transition`(封面 + `attached_pic` 流 + 首帧非黑 + 硬切/溶解两种模式下切页点均无黑帧且总时长不变)与 `review-round3`(七个功能缺陷:`--calibrate` 不许写回半份实测、`--topic <值> <项目目录>` 不许把值当目录、`--json` 位置无关、`--min WxH`、`--get` 全失败退非零、`capture --mode/--dsf` 与 `grab-frames --at` 在入口拒绝非法值、字幕带闸门只对定位元素生效、`--dry-run` 打完计划必须退 0、裸字符串 `transition` 在闸门与渲染器里同义;以及 check-slides / capture / build-video 的陈旧 CSS 闸门, 外加图表结构闸门: 百分比柱体裸放 flex column 会被点名(flex-shrink 压扁, 应包进 .chart-plot-cell))与 `subtitles-invalidate`(删掉 clauses 或 `--no-subs` 重建后, 成片里不得再有旧字幕 —— 像素级断言; 外加字幕关键帧形状不变量、静帧满亮/跨句残留判据、以及封面/静帧基底不得烙字幕(2026-09-22 字幕回归);全套用例需要装好 ffmpeg、ffprobe 与 Chromium(`PATH` 上,或本仓/项目 `node_modules` 里 —— `npm i ffmpeg-static ffprobe-static playwright`):缺了它们,需要这些工具的用例会**带着明确原因跳过**(缺工具、文件系统不允许建 junction),不会假装通过;渲染脚本本身则会明确报 `找不到 ffmpeg` 退出,不会假装跑完半条流水线。scoped workflow `.github/workflows/html2video-for-mcode-smoke.yml`(**位于 MiniMax-Code-Plugins monorepo**)会在插件 PR 与 main 上装齐依赖并把全部用例真跑一遍。
+测试覆盖：`safe-paths`(恶意 slide id / 路径、canary 完好性、符号链接逃逸 —— 含**悬空**链接必须被拦下,而不是当"不存在"跳过)、`no-clobber`(覆盖拒绝)、`endpoint-allowlist`(Key 不离开官方域,并用本地服务器证明闸门在请求之前;外加提供方选择:`mmx speech transcribe` 缺省与 `--provider api` 后备,mmx shim 集成对断言参数映射与临时目录中转/清理)、`fetch-policy`(SSRF、`file://`、重定向与文件名规则、**IPv4-mapped IPv6 十六进制形式**)、`connect-binding`(DNS 失败即拒(fail-closed),SSRF 否决挂到**建连那次** lookup —— 出网走 `policyGet`、浏览器流量走本地否决代理;rebinding 用例以"目标收到 **0 个请求**"为判据)、`preview-page`(快照注入实测延迟、`base` 顺序、自包含无外链、越界拒绝、无计时器、**竖版画布、iframe 强制相对解析**)、`tokens-fx`(模板里每个入场动画的关键帧必须声明 `opacity`、`no-fx` 必须重置基础态、`--upgrade-css` 幂等)、`chart-kit`(模板里真带着图表工具箱:keyframes / 注册属性 /「关动效 = 终态」不变量)、`table-kit`(表格原语的可读性硬指标:正文号、行高 ≥72px、涨跌走令牌、矩阵高亮列覆盖表头)、`css-kit`(**整段受管区**:陈旧 / 缺失 / 重复 / 定界符被改坏 / 区外还留着旧副本, 五种都要检出并原地修好 —— 区外副本会在层叠上压过受管区, 这正是本轮重写的起因; 项目端覆写按条保留、老格式裸文本原地包裹而不重复、`--check-css` 退出码、CRLF 不误报、病态互踩一次到位、超大输入拒绝 —— 外加复查在新机制自己身上揪出的两个假绿灯: 受管区是最新的、但区外还留着一份**主体副本**时以前报 `ok`(现在按主体形状识别并报 `legacy-outside`); 项目覆写的 `ok` 提示会点名它**在受管区之前还是之后**(之前则层叠上输, 之后才赢))与 `render-smoke`(init → 对时 → 静态闸门 → 截图 → 成片全链,**still 复截后静态回退必须点名警告**,外加**升级前后画面真的变了的像素级证明**), 以及 capture 的布局几何自检(溢出/顶部被裁点名数字)与骨架 safe center 契约。`review-round2`(输出收监 canary:项目内符号链接不得写到项目外;本地服务器证明被拒目标收到 0 个请求;单引号属性;ASR 请求失败必须计入失败;项目内 ffmpeg 发现)与 `cover-transition`(封面 + `attached_pic` 流 + 首帧非黑 + 硬切/溶解两种模式下切页点均无黑帧且总时长不变)与 `review-round3`(七个功能缺陷:`--calibrate` 不许写回半份实测、`--topic <值> <项目目录>` 不许把值当目录、`--json` 位置无关、`--min WxH`、`--get` 全失败退非零、`capture --mode/--dsf` 与 `grab-frames --at` 在入口拒绝非法值、字幕带闸门只对定位元素生效、`--dry-run` 打完计划必须退 0、裸字符串 `transition` 在闸门与渲染器里同义;以及 check-slides / capture / build-video 的陈旧 CSS 闸门, 外加图表结构闸门: 百分比柱体裸放 flex column 会被点名(flex-shrink 压扁, 应包进 .chart-plot-cell))与 `subtitles-invalidate`(删掉 clauses 或 `--no-subs` 重建后, 成片里不得再有旧字幕 —— 像素级断言; 外加字幕关键帧形状不变量、静帧满亮/跨句残留判据、以及封面/静帧基底不得烙字幕(2026-09-22 字幕回归);全套用例需要装好 ffmpeg、ffprobe 与 Chromium(`PATH` 上,或本仓/项目 `node_modules` 里 —— `npm i --save-exact ffmpeg-static@5.3.0 ffprobe-static@3.1.0 playwright@1.63.0`):缺了它们,需要这些工具的用例会**带着明确原因跳过**(缺工具、文件系统不允许建 junction),不会假装通过;渲染脚本本身则会明确报 `找不到 ffmpeg` 退出,不会假装跑完半条流水线。本仓库的 `.github/workflows/ci.yml` 会在 Linux 与 Windows 上运行全部测试。
 
 ## 排错
 

@@ -1,0 +1,15 @@
+{
+  "name": "html2video-for-mcode",
+  "version": "1.9.20",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

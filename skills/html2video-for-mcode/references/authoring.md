@@ -74,11 +74,13 @@ Type discipline: at most two levels on screen at once per slide (title + one sec
 
 ## Asset acquisition (Phase 3 · Gate 3)
 
+Default to typography and CSS/SVG charts. Before downloading or using external assets, require user confirmation of permission for the intended use and log evidence, attribution, and confirmation in MANIFEST. News images, screenshots, and real-person portraits require explicit opt-in. Official hosting and user-provided files do not establish permission.
+
 Process: list the requirements (which slides need images, and what) → source by the priority order below → compliance self-check → write to disk under `assets/` and register in `MANIFEST.md` → **present Gate 3 to the user**.
 
 **Sourcing priority (step down level by level, never force it):**
 
-1. **Official channels (first choice)**: logos from the official brand kit or simple-icons (curl-able); product screenshots taken from official help/docs; data from official reports. Strongest compliance; for factual subjects try to stop at this level.
+1. **Official channels (first choice)**: logos from the official brand kit or simple-icons (curl-able); product screenshots taken from official help/docs; data from official reports. Check the individual license and user-confirmed authorization before downloading.
 2. **Extract from the official site with a built-in browser / Playwright (measured and recommended, 2026-09)**: open the official site or official news page with the agent's built-in browser or Playwright, inspect the DOM and extract `<img>`/`<source>` assets (verify the src is an official CDN domain, then write to disk with `fetch-official-images.mjs --url <URL> --out-dir assets` —— the same host/size/filename validation set). Measured on Chinese AI-company subjects: 6/6 all relevant, far better than image-search engines. If the user chose "official assets only / pure layout" during kickoff alignment, skip this whole level.
 3. **Pure-layout fallback (the fallback that is always available)**: large type + number cards + colour + the expressive power of the layout itself. Better to omit than to fake —— when no suitable asset exists, use this level; the frame still holds up.
 
@@ -86,7 +88,7 @@ Process: list the requirements (which slides need images, and what) → source b
 
 **Compliance self-check (run through it for every asset):**
 
-- No watermarks. For a watermarked candidate: use a different image, or crop inside the watermark; if you cannot crop it out, do not use it.
+- No watermarks. Replace a watermarked candidate with an authorized asset; do not crop out watermarks or attribution to bypass restrictions.
 - Trademarks/logos are used only in the legitimate reference context of "talking about that brand", never as decorative filler.
 - Photos must come from licensable sources (official press images, CC-licensed, free stock libraries); for celebrity/people photos with no verifiable licence, prefer a text-only quotation card.
 - Screenshots state their source (official doc name + date).

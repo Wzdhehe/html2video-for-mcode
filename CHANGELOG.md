@@ -1,3 +1,11 @@
+## 1.9.20 — 2026-10-16
+
+- Address Feishu submission PLUGIN-202610030177: point homepage/repository to the real Wzdhehe source and identify this as a community plugin.
+- Default to typography; require explicit opt-in and user-confirmed permission before downloading news images, screenshots, or portraits. Record permission evidence and attribution; remove blanket reuse claims.
+- Pin npm install examples and CI dependencies; require explicit user consent before global installs or upgrades.
+- Reject ASR command-line keys (including equals syntax); use MINIMAX_API_KEY or an existing mmx login. Preserve endpoint and credential-isolation checks.
+- Align all three manifests at 1.9.20.
+
 # Changelog
 
 ## 1.9.19 — 2026-10-10

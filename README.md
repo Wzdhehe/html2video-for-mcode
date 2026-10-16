@@ -48,7 +48,7 @@ replacement), the generated-body template with its content fingerprint, and the 
 | 3. Script | Per-slide narration split into clauses; every slide carries at least two information layers on separate animation stages (order is free) |
 | 4. TTS | Voice synthesis (mcode connector, or `mmx-cli` elsewhere), then measure every clip with ffprobe |
 | 5. Timing | Derive each slide's duration and each animation's entrance time from the **measured** audio — nothing is hand-written |
-| 6. Assets | Official sources first, image framing primitives, compliance manifest |
+| 6. Assets | User-confirmed licensed assets, image framing primitives, authorization manifest |
 | 7. HTML | Staged entrance animations bound to the measured timings; layout recipes for 17 slide types |
 | 8. Render | Deterministic frame-stepping capture (animations land in the video), ffmpeg assembly with subtitles, optional background music. Before spending encode time, `preview-page.mjs` writes a play page so the deck can be screened in a browser |
 | 9. Verify | ASR transcription compared against the script; contrast, theme, and static-slide gates |
@@ -86,46 +86,54 @@ replacement), the generated-body template with its content fingerprint, and the 
 
 ## Install
 
-**As a plugin (MiniMax Code):** install `plugins/Wzdhehe/html2video-for-mcode` from the
-[MiniMax-Code-Plugins catalog](https://github.com/MiniMax-AI/MiniMax-Code-Plugins/tree/main/plugins/Wzdhehe/html2video-for-mcode) — that hosted
-directory is the publication unit, and the copy reviewed there is the one users get.
+**Source and ownership:** this is an independently maintained community plugin by Wzdhehe,
+not an official MiniMax plugin. The source and marketplace submission package are hosted at
+[Wzdhehe/html2video-for-mcode](https://github.com/Wzdhehe/html2video-for-mcode).
+The repository root contains `plugin.json`, `.claude-plugin/plugin.json`,
+`.minimax-plugin/plugin.json`, and `skills/html2video-for-mcode/`.
+Marketplace availability depends on review; this repository does not imply approval or listing.
 
-**As a plugin (mcode marketplace):** this repository's root is itself a plugin package —
-`plugin.json` (the portable manifest the runtime reads), `.claude-plugin/plugin.json` (mcode 0.4+),
-and `.minimax-plugin/plugin.json` (the marketplace submission manifest, with the listing icon and
-category). It carries the same `skills/html2video-for-mcode/` subtree the hosted catalog reviews,
-kept byte-identical by the release tooling.
-
-**As a standalone skill (any AgentSkills host):** copy the skill directory out of that hosted
-plugin (or out of this repository — the same bytes) into your host's skills directory:
+**As a standalone skill (any AgentSkills host):** from a checkout of this repository:
 
 ```bash
-# from a checkout of the MiniMax-Code-Plugins repository:
-cp -r plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode ~/.claude/skills/
-# or from a checkout of this repository (the same subtree):
 cp -r skills/html2video-for-mcode ~/.claude/skills/
 # project-level
-cp -r plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode <your-project>/.claude/skills/
+cp -r skills/html2video-for-mcode <your-project>/.claude/skills/
 ```
 
 Then install the two dependencies **in your video project** (not in the skill directory):
 
 ```bash
 cd <your-video-project>
-npm i playwright && npx playwright install chromium
+npm i --save-exact playwright@1.63.0 && npx --no-install playwright install chromium
 # ffmpeg: winget install Gyan.FFmpeg / brew install ffmpeg / apt install ffmpeg
-#         or: npm i ffmpeg-static ffprobe-static
+#         or: npm i --save-exact ffmpeg-static@5.3.0 ffprobe-static@3.1.0
 ```
+
+
+**Installation and credentials:** prefer project-local dependencies and retain the generated
+`package-lock.json`; repeat installs with `npm ci`. All npm package examples below use exact
+versions. Before any global install or upgrade, explain the package, version, and system-wide
+change and obtain explicit user consent. Only then may you run `npm install -g mmx-cli@1.0.26`.
+Use an existing `mmx auth login` session or provide `MINIMAX_API_KEY` through the environment.
+Never ask users to paste keys into chat, command arguments, source files, or project files.
+
+**Asset authorization:** default to typography and CSS/SVG charts. News images, article screenshots,
+and real-person portraits are disabled by default. Before downloading or using any external asset,
+have the user confirm permission for the intended use and record its source, license or permission
+evidence, attribution requirements, and user confirmation in `assets/MANIFEST.md`.
+An official site or a user-supplied file does not by itself establish reuse permission.
+If permission is missing or unclear, use typography instead.
 
 ## Requirements
 
-- **Node.js 18+** (plain ESM, no build step).
+- **Node.js 20+** (plain ESM, no build step).
 - **ffmpeg / ffprobe** on `PATH`, or `ffmpeg-static` / `ffprobe-static` in the project. Scripts
   probe `PATH → project node_modules → skill parents → common install locations`.
 - **Playwright Chromium** for capture. Install it in the video project — scripts resolve it from
   the project directory, the working directory, or the global npm root.
 - **Voice synthesis**, one of: mcode platform connectors, `mmx-cli`
-  (`npm i -g mmx-cli && mmx auth login --api-key sk-...`), or your own TTS written to
+  (with an existing `mmx auth login` session), or your own TTS written to
   `audio/<id>.mp3`. Both mcode connectors and `mmx-cli`/REST spend a **MiniMax account's paid,
   quota-metered balance** — the account is a required, billable service charged per character/minute.
 - **Reverse ASR verification** via `scripts/asr.mjs`, which transcribes the voiceover and compares
@@ -223,9 +231,12 @@ No telemetry, no analytics, no hidden endpoints, no installers, no native binari
   without changing anything.
 - No credentials are stored or embedded: with the default mmx provider the script never touches a
   key at all (mmx holds its own login); on the `--provider api` path it reads a key from
-  `MINIMAX_API_KEY` or `--api-key` at runtime and never writes it anywhere.
+  `MINIMAX_API_KEY` at runtime (command-line keys are rejected) and never writes it anywhere.
 - `KIT_PROJECT_DIR` is internal plumbing, set automatically by the CLI entry points so shared
   helpers can locate the project directory; you never need to set it yourself.
+
+For development in a repository checkout, run `npm ci --ignore-scripts` at the repository root;
+CI uses the committed lockfile for the same dependency tree.
 
 ## Verification
 
@@ -233,13 +244,11 @@ The Skill ships an executable test suite (`skills/html2video-for-mcode/tests/`, 
 `node:test` — no extra dependencies):
 
 ```bash
-# in the MiniMax-Code-Plugins monorepo (the plugin PR context), from the repository root:
-node --test "plugins/Wzdhehe/html2video-for-mcode/skills/html2video-for-mcode/tests/*.test.mjs"
 # in a standalone clone of this repository, from its root (the skill sits under skills/):
 node --test "skills/html2video-for-mcode/tests/*.test.mjs"
 ```
 
-285 tests in fifteen files: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
+The suite covers: `safe-paths` (malicious slide ids / paths, canary intactness, symlink
 escapes including a **dangling** link that must be caught rather than skipped), `no-clobber` (refusing to overwrite), `endpoint-allowlist` (key never leaves the official
 hosts — plus a local server that proves the gate sits before the request, and provider selection:
 `mmx speech transcribe` default vs `--provider api` fallback, with an mmx-shim integration pair
@@ -262,14 +271,10 @@ the new mechanism: a live region **plus a stale copy of the generated body outsi
 `ok`, and the `ok` note for a project override now says whether it sits before the region (loses the
 cascade) or after it (wins)) and `render-smoke` (init → timings → static gate → capture → build, end
 to end, **plus a pixel-level proof that upgrading a stale project really changes the rendered picture**), plus the capture layout-geometry self-check (content overflow / top-edge clipping named with numbers) and the safe-center scaffold contract. Two newer suites cover the second review round and the delivery-quality fixes: `review-round2` (canary tests proving output containment, a local server proving a rejected destination receives **zero** requests, single-quoted/unquoted HTML attributes, ASR request errors counted as failures, ffmpeg discovered from the project) and `cover-transition` (cover image present, `attached_pic` stream embedded, first frame not black, no black frame at any cut point in both hard-cut and cross-dissolve modes, total duration unchanged) and `review-round3` (the seven functional defects: `check-timing --calibrate` must not write back half-measured boundaries, `--topic <value> <project>` must not treat the value as the project directory, `--json` is position-independent, `--min WxH`, `--get` all-failed exits non-zero, `capture --mode/--dsf` and `grab-frames --at` reject bad values at the entry point, the subtitle-band gate only fires on positioned elements, `--dry-run` prints the plan and exits 0, and a bare-string `transition` must mean the same thing to the gate and the renderer — plus the stale-CSS gates on `check-slides` / `capture` / `build-video`, and the chart-structure gate: percentage-height bars sitting bare in a flex column get flagged (they collapse via flex-shrink; wrap them in `.chart-plot-cell`)) and `subtitles-invalidate` (deleting clauses, or `--no-subs`, and rebuilding must remove the old subtitles from the video — asserted at pixel level; plus keyframe-shape invariants, full-brightness / cross-still-leak checks on the spliced stills, and cover / still-mode-base must-stay-subtitle-free checks (the 2026-09-22 subtitle regressions)). Everything runs with ffmpeg, ffprobe and
-Chromium installed (on `PATH`, or in this repo's / your project's `node_modules` — `npm i
-ffmpeg-static ffprobe-static playwright`). Without them, every test that needs one of them **skips
+Chromium installed (on `PATH`, or in this repo's / your project's `node_modules` — `npm i --save-exact ffmpeg-static@5.3.0 ffprobe-static@3.1.0 playwright@1.63.0`). Without them, every test that needs one of them **skips
 with its stated reason** (a tool is absent, or the filesystem forbids creating a junction) — nothing
 pretends to pass, and the pipeline scripts themselves exit with `找不到 ffmpeg` instead of running
-half a pipeline. The scoped workflow
-`.github/workflows/html2video-for-mcode-smoke.yml` — which lives in the **MiniMax-Code-Plugins
-monorepo**) and runs on the plugin PR and on main —
-installs them and runs everything for real.
+half a pipeline. The repository workflow `.github/workflows/ci.yml` runs the suite on Linux and Windows.
 
 ## Troubleshooting
 
